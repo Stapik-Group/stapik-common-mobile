@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "pl.stapik.common"
-        minSdk = 36
+        minSdk = 26
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
