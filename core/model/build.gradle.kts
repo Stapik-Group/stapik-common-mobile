@@ -1,7 +1,9 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
+    `java-library`
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization) // only the tests declare @Serializable types for now
 }
 
 // Plain JVM module: no Android dependencies, so the domain model and (later) the sync engine
@@ -18,5 +20,8 @@ kotlin {
 }
 
 dependencies {
+    // Exposed in the public API (JsonObject), hence api().
+    api(libs.kotlinx.serialization.json)
+
     testImplementation(libs.junit)
 }
