@@ -1,0 +1,216 @@
+package pl.stapik.common.sync
+
+import java.time.Instant
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.Serializable
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import pl.stapik.common.model.CloudScope
+import pl.stapik.common.model.DocumentCodec
+import pl.stapik.common.model.DocumentEnvelope
+import pl.stapik.common.model.SlotKey
+
+class SyncEngineTest {
+
+    @Serializable
+    data class Notes(val items: List<String> = emptyList())
+
+    private val slot = SlotKey("notes.json")
+    private val codec = DocumentCodec(Notes.serializer()) { it.items.isEmpty() }
+
+    private class Fixture(codec: DocumentCodec<Notes>, slot: SlotKey) {
+        val clock = TestClock(Instant.parse("2026-10-16T12:00:00Z"))
+        val gateway = FakeCloudGateway()
+        val store = InMemoryDocumentStore()
+        var connected = true
+        val engine = SyncEngine(slot, codec, store, { if (connected) gateway else null }, clock)
+    }
+
+    private fun fixture() = Fixture(codec, slot)
+
+    private fun envelopeJson(updatedAt: String, items: List<String>, extra: String = "") =
+        """{"lastUpdate":"$updatedAt",$extra"payload":{"items":[${items.joinToString(",") { "\"$it\"" }}]}}"""
+
+    private fun remote(updatedAt: String, items: List<String>, extra: String = "") =
+        RemoteDocument(envelopeJson(updatedAt, items, extra), updatedAt)
+
+    private fun decode(document: RemoteDocument?): Notes =
+        codec.decode(DocumentEnvelope.parse(checkNotNull(document).content))
+
+    private val t0 = "2026-10-10T08:00:00Z"
+
+    @Test
+    fun `without a cloud, edits stay local`() = runBlocking {
+        val f = fixture().apply { connected = false }
+        assertEquals(SyncOutcome.LocalOnly, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("a")), f.engine.load())
+        assertTrue(f.store.document!!.dirty)
+        assertEquals(SyncStatus.IDLE, f.engine.status.value)
+    }
+
+    @Test
+    fun `first connection with no local data takes the cloud`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
+        assertEquals(SyncOutcome.Synchronized, f.engine.sync())
+        assertEquals(Notes(listOf("cloud")), f.engine.load())
+        val stored = f.store.document!!
+        assertFalse(stored.dirty)
+        assertEquals(t0, stored.cloudBaseline)
+        assertEquals("cloud-1", stored.cloudIdentity)
+    }
+
+    @Test
+    fun `first connection with data on both sides asks, and changes nothing until answered`() = runBlocking {
+        val f = fixture().apply {
+            connected = false
+            engine.edit { Notes(listOf("a")) }
+            connected = true
+            gateway.document = remote(t0, listOf("cloud"))
+        }
+        assertEquals(SyncOutcome.NeedsFirstConnectionChoice(true), f.engine.sync())
+        assertEquals(SyncStatus.NEEDS_CHOICE, f.engine.status.value)
+        assertEquals(Notes(listOf("a")), f.engine.load())
+        assertTrue(f.store.document!!.dirty)
+        assertTrue(f.gateway.writes.isEmpty())
+        assertTrue(f.store.copies.isEmpty())
+    }
+
+    @Test
+    fun `answering USE_CLOUD takes the cloud and keeps the local data as a conflict copy`() = runBlocking {
+        val f = fixture().apply {
+            connected = false
+            engine.edit { Notes(listOf("a")) }
+            connected = true
+            gateway.document = remote(t0, listOf("cloud"))
+        }
+        assertEquals(SyncOutcome.ServerWon, f.engine.sync(FirstConnectionChoice.USE_CLOUD))
+        assertEquals(Notes(listOf("cloud")), f.engine.load())
+        val copy = f.store.copies.single()
+        assertEquals(ConflictSource.LOCAL, copy.source)
+        assertEquals(Notes(listOf("a")), codec.decode(DocumentEnvelope.parse(copy.content)))
+    }
+
+    @Test
+    fun `answering SEND_LOCAL pushes local data and keeps the cloud version as a conflict copy`() = runBlocking {
+        val f = fixture().apply {
+            connected = false
+            engine.edit { Notes(listOf("a")) }
+            connected = true
+            gateway.document = remote(t0, listOf("cloud"))
+        }
+        val original = f.gateway.document!!.content
+        assertEquals(SyncOutcome.LocalWon, f.engine.sync(FirstConnectionChoice.SEND_LOCAL))
+        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
+        val copy = f.store.copies.single()
+        assertEquals(ConflictSource.CLOUD, copy.source)
+        assertEquals(original, copy.content)
+        val stored = f.store.document!!
+        assertFalse(stored.dirty)
+        assertEquals(f.gateway.document!!.updatedAt, stored.cloudBaseline)
+    }
+
+    @Test
+    fun `edits are pushed when connected`() = runBlocking {
+        val f = fixture()
+        assertEquals(SyncOutcome.Synchronized, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(SyncOutcome.Synchronized, f.engine.edit { Notes(it.items + "b") })
+        assertEquals(Notes(listOf("a", "b")), decode(f.gateway.document))
+        assertEquals(2, f.gateway.writes.size)
+        assertFalse(f.store.document!!.dirty)
+    }
+
+    @Test
+    fun `offline edits are kept and sent later`() = runBlocking {
+        val f = fixture().apply { gateway.failure = CloudError.Network("down") }
+        assertEquals(SyncOutcome.Offline(CloudError.Network("down")), f.engine.edit { Notes(listOf("a")) })
+        assertEquals(SyncStatus.OFFLINE, f.engine.status.value)
+        assertTrue(f.store.document!!.dirty)
+        assertEquals(Notes(listOf("a")), f.engine.load())
+
+        f.gateway.failure = null
+        assertEquals(SyncOutcome.Synchronized, f.engine.sync())
+        assertEquals(SyncStatus.IDLE, f.engine.status.value)
+        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
+    }
+
+    @Test
+    fun `rate limiting is reported as offline with the retry hint`() = runBlocking {
+        val f = fixture().apply { gateway.failure = CloudError.RateLimited(30) }
+        assertEquals(SyncOutcome.Offline(CloudError.RateLimited(30)), f.engine.edit { Notes(listOf("a")) })
+    }
+
+    @Test
+    fun `a rejected key is reported and the edit is kept`() = runBlocking {
+        val f = fixture().apply { gateway.failure = CloudError.Unauthorized }
+        assertEquals(SyncOutcome.AuthProblem(CloudError.Unauthorized), f.engine.edit { Notes(listOf("a")) })
+        assertEquals(SyncStatus.ERROR, f.engine.status.value)
+        assertEquals(Notes(listOf("a")), f.engine.load())
+    }
+
+    @Test
+    fun `an unreadable cloud document stops everything and writes nothing`() = runBlocking {
+        val f = fixture().apply {
+            connected = false
+            engine.edit { Notes(listOf("a")) }
+            connected = true
+            gateway.document = RemoteDocument("this is not json", t0)
+        }
+        val before = f.store.document
+        assertTrue(f.engine.sync() is SyncOutcome.RemoteUnreadable)
+        assertEquals(SyncStatus.ERROR, f.engine.status.value)
+        assertEquals(before, f.store.document)
+        assertTrue(f.gateway.writes.isEmpty())
+        assertTrue(f.store.copies.isEmpty())
+    }
+
+    @Test
+    fun `unknown fields in the cloud document survive an edit`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, emptyList(), extra = """"futureField":{"x":1},""") }
+        assertEquals(SyncOutcome.Synchronized, f.engine.sync())
+        assertEquals(SyncOutcome.Synchronized, f.engine.edit { Notes(listOf("a")) })
+        assertTrue(f.gateway.document!!.content.contains(""""futureField":{"x":1}"""))
+        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
+    }
+
+    @Test
+    fun `a lost race is retried and the newer local version wins`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, emptyList()) }
+        f.engine.sync()
+        var runs = 0
+        f.gateway.onBeforeWrite = {
+            if (runs++ == 0) f.gateway.document = remote("2026-10-16T09:00:00Z", listOf("server"))
+        }
+        assertEquals(SyncOutcome.LocalWon, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
+        assertEquals(ConflictSource.CLOUD, f.store.copies.single().source)
+    }
+
+    @Test
+    fun `when the server keeps changing, the server version wins after three attempts`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, emptyList()) }
+        f.engine.sync()
+        var n = 0
+        f.gateway.onBeforeWrite = {
+            f.gateway.document = remote("2026-10-16T09:00:0${n++}Z", listOf("server$n"))
+        }
+        assertEquals(SyncOutcome.ServerWon, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("server3")), f.engine.load())
+        assertEquals(1, f.store.copies.count { it.source == ConflictSource.LOCAL })
+        assertFalse(f.store.document!!.dirty)
+    }
+
+    @Test
+    fun `a read-only key keeps local changes unsynced`() = runBlocking {
+        val f = fixture().apply {
+            gateway.info = gateway.info.copy(scope = CloudScope.READ_ONLY)
+            gateway.document = remote(t0, listOf("cloud"))
+        }
+        f.engine.sync()
+        assertEquals(SyncOutcome.KeptLocalUnsynced, f.engine.edit { Notes(it.items + "a") })
+        assertTrue(f.store.document!!.dirty)
+        assertTrue(f.gateway.writes.isEmpty())
+        assertEquals(CloudScope.READ_ONLY, f.store.document!!.scope)
+    }
+}
