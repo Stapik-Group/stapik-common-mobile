@@ -24,4 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Stapik Common Mobile"
 include(":core:sync")
+include(":core:document")
 include(":core:model")
