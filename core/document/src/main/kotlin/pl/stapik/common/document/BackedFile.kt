@@ -25,7 +25,7 @@ class DocumentCorruptedException(val files: List<Path>, cause: Throwable? = null
  * "Readable" means: decrypts with the [cipher] and is accepted by the caller's `parse` function.
  * Blocking I/O; the caller chooses the dispatcher. Not thread-safe.
  */
-internal class BackedFile(
+class BackedFile(
     private val directory: Path,
     name: String,
     private val cipher: PayloadCipher,
@@ -65,6 +65,13 @@ internal class BackedFile(
         rotateBackups(parse)
         writeAndFlush(temp, encrypted)
         Files.move(temp, current, StandardCopyOption.ATOMIC_MOVE)
+    }
+
+    /** Removes the file, its temporary file and every backup. */
+    fun delete() {
+        Files.deleteIfExists(current)
+        Files.deleteIfExists(temp)
+        for (index in 1..backupCount) Files.deleteIfExists(backup(index))
     }
 
     private fun <R> rotateBackups(parse: (ByteArray) -> R) {
