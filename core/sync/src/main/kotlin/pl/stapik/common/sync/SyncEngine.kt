@@ -194,7 +194,7 @@ class SyncEngine<T>(
 
     private fun CloudError.toOutcome(): SyncOutcome = when (this) {
         CloudError.Unauthorized, CloudError.Forbidden -> SyncOutcome.AuthProblem(this)
-        is CloudError.Unreadable -> SyncOutcome.RemoteUnreadable(reason)
+        is CloudError.Unreadable -> SyncOutcome.RemoteUnreadable(reason, kind)
         CloudError.Conflict, is CloudError.RateLimited, is CloudError.ServerError, is CloudError.Network ->
             SyncOutcome.Offline(this)
     }

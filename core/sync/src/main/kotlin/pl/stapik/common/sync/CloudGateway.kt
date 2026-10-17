@@ -22,7 +22,22 @@ sealed interface CloudError {
     data class Network(val message: String? = null) : CloudError
 
     /** The stored document cannot be understood (unknown encoding, encrypted without a passphrase). */
-    data class Unreadable(val reason: String) : CloudError
+    data class Unreadable(val reason: String, val kind: UnreadableKind = UnreadableKind.OTHER) : CloudError
+}
+
+/** Why a cloud document is unreadable; lets the UI ask for the right thing. */
+enum class UnreadableKind {
+    /** Damaged, not a valid envelope, or an unknown format. */
+    OTHER,
+
+    /** The document is end-to-end encrypted and no passphrase is set. */
+    PASSPHRASE_REQUIRED,
+
+    /** A passphrase is set but it is wrong, or the data was modified. */
+    DECRYPTION_FAILED,
+
+    /** Written by a newer version of the application. */
+    UNSUPPORTED_VERSION,
 }
 
 /** Thrown by a [CloudGateway] to report a [CloudError]. */

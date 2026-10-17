@@ -27,7 +27,7 @@ sealed interface SyncOutcome {
     data class NeedsFirstConnectionChoice(val canKeepLocal: Boolean) : SyncOutcome
 
     /** The cloud document cannot be read; nothing was written anywhere. */
-    data class RemoteUnreadable(val reason: String) : SyncOutcome
+    data class RemoteUnreadable(val reason: String, val kind: UnreadableKind = UnreadableKind.OTHER) : SyncOutcome
 }
 
 /** Coarse state for the UI. */

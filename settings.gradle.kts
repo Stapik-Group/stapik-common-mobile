@@ -26,5 +26,6 @@ rootProject.name = "Stapik Common Mobile"
 include(":core:sync")
 include(":core:document")
 include(":core:crypto")
+include(":core:cloud")
 include(":sample-app")
 include(":core:model")
