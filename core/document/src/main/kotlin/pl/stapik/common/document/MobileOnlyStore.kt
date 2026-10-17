@@ -59,20 +59,33 @@ class MobileOnlyStore<T>(
         }
     }
 
+    /** The current value (or the default) in the stored format, for export. */
+    suspend fun exportJson(): String = mutex.withLock { withContext(Dispatchers.IO) { render(readValue()) } }
+
+    /**
+     * Replaces the value with the one in [text], which is in the format of [exportJson].
+     * Throws [IllegalArgumentException] (or a subclass) if [text] is not valid; nothing is written then.
+     */
+    suspend fun importJson(text: String) = mutex.withLock {
+        withContext(Dispatchers.IO) { writeValue(decode(text.toByteArray(Charsets.UTF_8))) }
+    }
+
     private fun readValue(): T {
         val loaded = file.read { decode(it) }
         lastLoadRecoveredFromBackup = loaded?.fromBackup ?: false
         return loaded?.value ?: default
     }
 
-    private fun writeValue(value: T) {
-        val root = JsonObject(
+    private fun render(value: T): String =
+        JsonObject(
             mapOf(
                 VERSION to JsonPrimitive(schemaVersion),
                 DATA to json.encodeToJsonElement(serializer, value),
             ),
-        )
-        file.write(root.toString().toByteArray(Charsets.UTF_8)) { decode(it) }
+        ).toString()
+
+    private fun writeValue(value: T) {
+        file.write(render(value).toByteArray(Charsets.UTF_8)) { decode(it) }
     }
 
     private fun decode(bytes: ByteArray): T {
