@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_syncing">Synchronizacja…</string>
+    <string name="sync_local_only">Dane tylko na tym urządzeniu</string>
+    <string name="sync_synced">Zsynchronizowano</string>
+    <string name="sync_pending">Zmiany czekają na wysłanie</string>
+    <string name="sync_resolved_server">Zmiany na dwóch urządzeniach połączono: zostaje wersja z chmury, a Twoja jest zapisana jako kopia</string>
+    <string name="sync_resolved_local">Zmiany na dwóch urządzeniach połączono: zostaje Twoja wersja, a wersja z chmury jest zapisana jako kopia</string>
+    <string name="sync_read_only">Ten klucz jest tylko do odczytu, więc zmiany zostają na tym urządzeniu</string>
+    <string name="sync_offline_network">Brak połączenia z chmurą. Zmiany są zapisane i zostaną wysłane później</string>
+    <string name="sync_offline_server">Chmura nie odpowiada. Zmiany są zapisane i zostaną wysłane później</string>
+    <string name="sync_offline_conflict">Dane w chmurze ciągle się zmieniały. Spróbuj za chwilę</string>
+    <string name="sync_offline_rate_limited">Chmura jest zajęta. Spróbuj za %1$d s</string>
+    <string name="sync_auth_unauthorized">Klucz API został odrzucony lub wygasł. Połącz ponownie</string>
+    <string name="sync_auth_forbidden">Ten klucz API nie ma do tego uprawnień. Połącz innym kluczem</string>
+    <string name="sync_needs_choice">Dane są i tutaj, i w chmurze. Wybierz, które zostawić</string>
+    <string name="sync_unreadable_passphrase_required">Dane w chmurze są zaszyfrowane. Podaj frazę</string>
+    <string name="sync_unreadable_wrong_passphrase">Fraza jest błędna albo dane w chmurze zostały zmienione</string>
+    <string name="sync_unreadable_newer_version">Dane w chmurze pochodzą z nowszej wersji aplikacji. Zaktualizuj aplikację</string>
+    <string name="sync_unreadable_other">Nie można odczytać danych z chmury. Nic nie zostało zmienione</string>
+    <string name="sync_newer_schema">Te dane pochodzą z nowszej wersji aplikacji i nie można ich tu edytować. Zaktualizuj aplikację</string>
+    <string name="connect_title">Stapik Cloud</string>
+    <string name="connect_url">Adres serwera</string>
+    <string name="connect_key">Klucz API</string>
+    <string name="connect_passphrase">Fraza szyfrowania (opcjonalnie)</string>
+    <string name="connect_key_show">Pokaż klucz</string>
+    <string name="connect_key_hide">Ukryj klucz</string>
+    <string name="connect_insecure_warning">Ten adres nie jest szyfrowany (http). Klucz może zostać podejrzany po drodze. Jeśli możesz, użyj https</string>
+    <string name="connect_invalid_url">Adres musi zaczynać się od https:// lub http://</string>
+    <string name="connect_submit">Połącz</string>
+    <string name="connect_disconnect">Rozłącz</string>
+    <string name="connect_error_invalid_form">Podaj adres serwera i klucz API</string>
+    <string name="connect_error_unauthorized">Klucz API został odrzucony</string>
+    <string name="connect_error_forbidden">Ten klucz API nie ma uprawnień do odczytu danych</string>
+    <string name="connect_error_network">Nie można połączyć się z serwerem. Sprawdź adres i połączenie</string>
+    <string name="connect_error_server">Serwer zwrócił błąd. Spróbuj później</string>
+    <string name="connect_error_rate_limited">Zbyt wiele żądań. Spróbuj za chwilę</string>
+    <string name="connect_error_unexpected">Nieoczekiwana odpowiedź serwera</string>
+    <string name="action_retry">Spróbuj ponownie</string>
+    <string name="action_reconnect">Połącz ponownie</string>
+    <string name="action_enter_passphrase">Podaj frazę</string>
+    <string name="action_choose_source">Wybierz</string>
+    <string name="action_update_app">Zaktualizuj aplikację</string>
+</resources>

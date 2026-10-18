@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Messages are looked up by name at run time (see Messages.kt); stop resource shrinking from removing them. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/sync_*,@string/connect_*,@string/action_*" />

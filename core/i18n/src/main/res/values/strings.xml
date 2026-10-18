@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_syncing">Syncing…</string>
+    <string name="sync_local_only">Stored on this device only</string>
+    <string name="sync_synced">Synced</string>
+    <string name="sync_pending">Changes waiting to be sent</string>
+    <string name="sync_resolved_server">Changes on two devices were merged: the cloud version was kept and yours is saved as a copy</string>
+    <string name="sync_resolved_local">Changes on two devices were merged: your version was kept and the cloud one is saved as a copy</string>
+    <string name="sync_read_only">This key is read-only, so changes stay on this device</string>
+    <string name="sync_offline_network">No connection to the cloud. Changes are saved and will be sent later</string>
+    <string name="sync_offline_server">The cloud is not responding. Changes are saved and will be sent later</string>
+    <string name="sync_offline_conflict">The cloud kept changing. Try again in a moment</string>
+    <string name="sync_offline_rate_limited">The cloud is busy. Try again in %1$d s</string>
+    <string name="sync_auth_unauthorized">The API key was rejected or has expired. Connect again</string>
+    <string name="sync_auth_forbidden">This API key is not allowed to do that. Connect with another key</string>
+    <string name="sync_needs_choice">There is data here and in the cloud. Choose which to keep</string>
+    <string name="sync_unreadable_passphrase_required">The cloud data is encrypted. Enter the passphrase</string>
+    <string name="sync_unreadable_wrong_passphrase">The passphrase is wrong, or the cloud data was modified</string>
+    <string name="sync_unreadable_newer_version">The cloud data comes from a newer version of the app. Update the app</string>
+    <string name="sync_unreadable_other">The cloud data cannot be read. Nothing was changed</string>
+    <string name="sync_newer_schema">This data comes from a newer version of the app and cannot be edited here. Update the app</string>
+    <string name="connect_title">Stapik Cloud</string>
+    <string name="connect_url">Server address</string>
+    <string name="connect_key">API key</string>
+    <string name="connect_passphrase">Encryption passphrase (optional)</string>
+    <string name="connect_key_show">Show key</string>
+    <string name="connect_key_hide">Hide key</string>
+    <string name="connect_insecure_warning">This address is not encrypted (http). Your key can be read on the way. Use https if you can</string>
+    <string name="connect_invalid_url">The address must start with https:// or http://</string>
+    <string name="connect_submit">Connect</string>
+    <string name="connect_disconnect">Disconnect</string>
+    <string name="connect_error_invalid_form">Enter the server address and the API key</string>
+    <string name="connect_error_unauthorized">The API key was rejected</string>
+    <string name="connect_error_forbidden">This API key is not allowed to read data</string>
+    <string name="connect_error_network">Cannot reach the server. Check the address and your connection</string>
+    <string name="connect_error_server">The server returned an error. Try again later</string>
+    <string name="connect_error_rate_limited">Too many requests. Try again in a moment</string>
+    <string name="connect_error_unexpected">Unexpected answer from the server</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_reconnect">Connect again</string>
+    <string name="action_enter_passphrase">Enter passphrase</string>
+    <string name="action_choose_source">Choose</string>
+    <string name="action_update_app">Update the app</string>
+</resources>

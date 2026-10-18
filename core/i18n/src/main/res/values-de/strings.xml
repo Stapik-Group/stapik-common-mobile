@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_syncing">Synchronisierung…</string>
+    <string name="sync_local_only">Nur auf diesem Gerät gespeichert</string>
+    <string name="sync_synced">Synchronisiert</string>
+    <string name="sync_pending">Änderungen warten auf das Senden</string>
+    <string name="sync_resolved_server">Änderungen auf zwei Geräten wurden zusammengeführt: Die Cloud-Version bleibt, Ihre wurde als Kopie gespeichert</string>
+    <string name="sync_resolved_local">Änderungen auf zwei Geräten wurden zusammengeführt: Ihre Version bleibt, die Cloud-Version wurde als Kopie gespeichert</string>
+    <string name="sync_read_only">Dieser Schlüssel ist schreibgeschützt, daher bleiben Änderungen auf diesem Gerät</string>
+    <string name="sync_offline_network">Keine Verbindung zur Cloud. Änderungen sind gespeichert und werden später gesendet</string>
+    <string name="sync_offline_server">Die Cloud antwortet nicht. Änderungen sind gespeichert und werden später gesendet</string>
+    <string name="sync_offline_conflict">Die Daten in der Cloud haben sich ständig geändert. Versuchen Sie es gleich noch einmal</string>
+    <string name="sync_offline_rate_limited">Die Cloud ist ausgelastet. Versuchen Sie es in %1$d s erneut</string>
+    <string name="sync_auth_unauthorized">Der API-Schlüssel wurde abgelehnt oder ist abgelaufen. Bitte neu verbinden</string>
+    <string name="sync_auth_forbidden">Dieser API-Schlüssel hat dafür keine Berechtigung. Verbinden Sie sich mit einem anderen Schlüssel</string>
+    <string name="sync_needs_choice">Es gibt Daten hier und in der Cloud. Wählen Sie, welche behalten werden</string>
+    <string name="sync_unreadable_passphrase_required">Die Cloud-Daten sind verschlüsselt. Geben Sie die Passphrase ein</string>
+    <string name="sync_unreadable_wrong_passphrase">Die Passphrase ist falsch oder die Cloud-Daten wurden verändert</string>
+    <string name="sync_unreadable_newer_version">Die Cloud-Daten stammen aus einer neueren Version der App. Bitte die App aktualisieren</string>
+    <string name="sync_unreadable_other">Die Cloud-Daten können nicht gelesen werden. Es wurde nichts geändert</string>
+    <string name="sync_newer_schema">Diese Daten stammen aus einer neueren Version der App und können hier nicht bearbeitet werden. Bitte die App aktualisieren</string>
+    <string name="connect_title">Stapik Cloud</string>
+    <string name="connect_url">Serveradresse</string>
+    <string name="connect_key">API-Schlüssel</string>
+    <string name="connect_passphrase">Verschlüsselungs-Passphrase (optional)</string>
+    <string name="connect_key_show">Schlüssel anzeigen</string>
+    <string name="connect_key_hide">Schlüssel verbergen</string>
+    <string name="connect_insecure_warning">Diese Adresse ist nicht verschlüsselt (http). Ihr Schlüssel kann unterwegs mitgelesen werden. Nutzen Sie nach Möglichkeit https</string>
+    <string name="connect_invalid_url">Die Adresse muss mit https:// oder http:// beginnen</string>
+    <string name="connect_submit">Verbinden</string>
+    <string name="connect_disconnect">Trennen</string>
+    <string name="connect_error_invalid_form">Geben Sie Serveradresse und API-Schlüssel ein</string>
+    <string name="connect_error_unauthorized">Der API-Schlüssel wurde abgelehnt</string>
+    <string name="connect_error_forbidden">Dieser API-Schlüssel darf keine Daten lesen</string>
+    <string name="connect_error_network">Der Server ist nicht erreichbar. Prüfen Sie Adresse und Verbindung</string>
+    <string name="connect_error_server">Der Server hat einen Fehler gemeldet. Versuchen Sie es später erneut</string>
+    <string name="connect_error_rate_limited">Zu viele Anfragen. Versuchen Sie es gleich noch einmal</string>
+    <string name="connect_error_unexpected">Unerwartete Antwort des Servers</string>
+    <string name="action_retry">Erneut versuchen</string>
+    <string name="action_reconnect">Neu verbinden</string>
+    <string name="action_enter_passphrase">Passphrase eingeben</string>
+    <string name="action_choose_source">Auswählen</string>
+    <string name="action_update_app">App aktualisieren</string>
+</resources>
