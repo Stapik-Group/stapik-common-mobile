@@ -19,14 +19,14 @@
     <string name="sync_unreadable_newer_version">Die Cloud-Daten stammen aus einer neueren Version der App. Bitte die App aktualisieren</string>
     <string name="sync_unreadable_other">Die Cloud-Daten können nicht gelesen werden. Es wurde nichts geändert</string>
     <string name="sync_newer_schema">Diese Daten stammen aus einer neueren Version der App und können hier nicht bearbeitet werden. Bitte die App aktualisieren</string>
-    <string name="connect_title">Stapik Cloud</string>
-    <string name="connect_url">Serveradresse</string>
+    <string name="connect_title">Mit Cloud verbinden</string>
+    <string name="connect_url">API-URL</string>
     <string name="connect_key">API-Schlüssel</string>
-    <string name="connect_passphrase">Verschlüsselungs-Passphrase (optional)</string>
-    <string name="connect_key_show">Schlüssel anzeigen</string>
+    <string name="connect_passphrase">Passphrase für Ende-zu-Ende-Verschlüsselung (optional)</string>
+    <string name="connect_key_show">Schlüssel und Passphrase anzeigen</string>
     <string name="connect_key_hide">Schlüssel verbergen</string>
-    <string name="connect_insecure_warning">Diese Adresse ist nicht verschlüsselt (http). Ihr Schlüssel kann unterwegs mitgelesen werden. Nutzen Sie nach Möglichkeit https</string>
-    <string name="connect_invalid_url">Die Adresse muss mit https:// oder http:// beginnen</string>
+    <string name="connect_insecure_warning">Unsichere Verbindung: Schlüssel und Daten werden unverschlüsselt gesendet.</string>
+    <string name="connect_invalid_url">Die Adresse muss mit http:// oder https:// beginnen</string>
     <string name="connect_submit">Verbinden</string>
     <string name="connect_disconnect">Trennen</string>
     <string name="connect_error_invalid_form">Geben Sie Serveradresse und API-Schlüssel ein</string>
@@ -41,4 +41,14 @@
     <string name="action_enter_passphrase">Passphrase eingeben</string>
     <string name="action_choose_source">Auswählen</string>
     <string name="action_update_app">App aktualisieren</string>
+    <string name="theme_classic">Klassisch</string>
+    <string name="theme_classic_pink">Klassisch Pink</string>
+    <string name="theme_modern">Modern</string>
+    <string name="theme_dark">Dunkel</string>
+    <string name="theme_neoclassic">Neoklassisch</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="action_close">Schließen</string>
+    <string name="connect_passphrase_hint">Der Server sieht nur verschlüsselte Daten. Ohne diese Passphrase lassen sie sich nicht wiederherstellen, daher auf jedem Gerät dieselbe eingeben.</string>
+    <string name="sync_api_key_expiring">Ihr Cloud-API-Schlüssel läuft am %1$s ab. Erstellen Sie im Cloud-Panel einen neuen und tragen Sie ihn in den Verbindungseinstellungen ein.</string>
 </resources>

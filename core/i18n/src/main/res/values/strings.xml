@@ -19,14 +19,14 @@
     <string name="sync_unreadable_newer_version">The cloud data comes from a newer version of the app. Update the app</string>
     <string name="sync_unreadable_other">The cloud data cannot be read. Nothing was changed</string>
     <string name="sync_newer_schema">This data comes from a newer version of the app and cannot be edited here. Update the app</string>
-    <string name="connect_title">Stapik Cloud</string>
-    <string name="connect_url">Server address</string>
+    <string name="connect_title">Connect to cloud</string>
+    <string name="connect_url">API URL</string>
     <string name="connect_key">API key</string>
-    <string name="connect_passphrase">Encryption passphrase (optional)</string>
-    <string name="connect_key_show">Show key</string>
+    <string name="connect_passphrase">End-to-end encryption passphrase (optional)</string>
+    <string name="connect_key_show">Show key and passphrase</string>
     <string name="connect_key_hide">Hide key</string>
-    <string name="connect_insecure_warning">This address is not encrypted (http). Your key can be read on the way. Use https if you can</string>
-    <string name="connect_invalid_url">The address must start with https:// or http://</string>
+    <string name="connect_insecure_warning">Not a secure connection: the key and data are sent unencrypted.</string>
+    <string name="connect_invalid_url">The address must start with http:// or https://</string>
     <string name="connect_submit">Connect</string>
     <string name="connect_disconnect">Disconnect</string>
     <string name="connect_error_invalid_form">Enter the server address and the API key</string>
@@ -41,4 +41,14 @@
     <string name="action_enter_passphrase">Enter passphrase</string>
     <string name="action_choose_source">Choose</string>
     <string name="action_update_app">Update the app</string>
+    <string name="theme_classic">Classic</string>
+    <string name="theme_classic_pink">Classic Pink</string>
+    <string name="theme_modern">Modern</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_neoclassic">Neoclassic</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+    <string name="connect_passphrase_hint">The server only sees encrypted data. Without this passphrase the data cannot be recovered, so enter the same one on every device.</string>
+    <string name="sync_api_key_expiring">Your cloud API key expires on %1$s. Create a new one in the cloud panel and enter it in the connection settings.</string>
 </resources>

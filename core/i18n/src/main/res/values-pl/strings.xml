@@ -19,14 +19,14 @@
     <string name="sync_unreadable_newer_version">Dane w chmurze pochodzą z nowszej wersji aplikacji. Zaktualizuj aplikację</string>
     <string name="sync_unreadable_other">Nie można odczytać danych z chmury. Nic nie zostało zmienione</string>
     <string name="sync_newer_schema">Te dane pochodzą z nowszej wersji aplikacji i nie można ich tu edytować. Zaktualizuj aplikację</string>
-    <string name="connect_title">Stapik Cloud</string>
-    <string name="connect_url">Adres serwera</string>
+    <string name="connect_title">Połącz z chmurą</string>
+    <string name="connect_url">Adres API</string>
     <string name="connect_key">Klucz API</string>
-    <string name="connect_passphrase">Fraza szyfrowania (opcjonalnie)</string>
-    <string name="connect_key_show">Pokaż klucz</string>
+    <string name="connect_passphrase">Hasło szyfrowania end-to-end (opcjonalne)</string>
+    <string name="connect_key_show">Pokaż klucz i hasło</string>
     <string name="connect_key_hide">Ukryj klucz</string>
-    <string name="connect_insecure_warning">Ten adres nie jest szyfrowany (http). Klucz może zostać podejrzany po drodze. Jeśli możesz, użyj https</string>
-    <string name="connect_invalid_url">Adres musi zaczynać się od https:// lub http://</string>
+    <string name="connect_insecure_warning">Połączenie niezabezpieczone: klucz i dane są wysyłane bez szyfrowania.</string>
+    <string name="connect_invalid_url">Adres musi zaczynać się od http:// lub https://</string>
     <string name="connect_submit">Połącz</string>
     <string name="connect_disconnect">Rozłącz</string>
     <string name="connect_error_invalid_form">Podaj adres serwera i klucz API</string>
@@ -41,4 +41,14 @@
     <string name="action_enter_passphrase">Podaj frazę</string>
     <string name="action_choose_source">Wybierz</string>
     <string name="action_update_app">Zaktualizuj aplikację</string>
+    <string name="theme_classic">Klasyczny</string>
+    <string name="theme_classic_pink">Klasyczny różowy</string>
+    <string name="theme_modern">Nowoczesny</string>
+    <string name="theme_dark">Ciemny</string>
+    <string name="theme_neoclassic">Neoklasyczny</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Anuluj</string>
+    <string name="action_close">Zamknij</string>
+    <string name="connect_passphrase_hint">Serwer widzi tylko zaszyfrowane dane. Bez tego hasła nie da się ich odzyskać, więc wpisz to samo na każdym urządzeniu.</string>
+    <string name="sync_api_key_expiring">Twój klucz API chmury wygasa %1$s. Utwórz nowy w panelu chmury i wpisz go w ustawieniach połączenia.</string>
 </resources>
