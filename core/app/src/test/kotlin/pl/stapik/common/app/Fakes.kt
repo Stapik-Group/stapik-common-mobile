@@ -1,5 +1,6 @@
 package pl.stapik.common.app
 
+import pl.stapik.common.cloud.SealedBackupException
 import pl.stapik.common.document.BackupContents
 import pl.stapik.common.document.BackupFormatException
 import pl.stapik.common.model.DocumentEnvelope
@@ -8,6 +9,7 @@ import pl.stapik.common.sync.ConflictCopy
 import pl.stapik.common.sync.DocumentReplacer
 import pl.stapik.common.sync.DocumentStore
 import pl.stapik.common.sync.SyncOutcome
+import pl.stapik.common.sync.UnreadableKind
 
 class MemoryDocumentStore(var document: LocalDocument<DocumentEnvelope>? = null) : DocumentStore {
     override suspend fun load() = document
@@ -27,16 +29,22 @@ class MemoryPort(var json: String, var failOnImport: Boolean = false) : MobileOn
     }
 }
 
-/** Archives are kept in a table; the "bytes" are only the key. */
+/** Archives are kept in a table; the "bytes" are only the key. A passphrase makes the key unreadable without it. */
 class TableArchiveFormat : ArchiveFormat {
-    private val table = mutableMapOf<String, BackupContents>()
-    override fun write(contents: BackupContents): ByteArray {
+    private val table = mutableMapOf<String, Pair<BackupContents, String?>>()
+    override fun write(contents: BackupContents, passphrase: String?): ByteArray {
         val key = "archive-${table.size}"
-        table[key] = contents
+        table[key] = contents to passphrase?.takeIf { it.isNotEmpty() }
         return key.toByteArray()
     }
-    override fun read(bytes: ByteArray): BackupContents =
-        table[String(bytes)] ?: throw BackupFormatException("not an archive")
+    override fun read(bytes: ByteArray, passphrase: String?): BackupContents {
+        val (contents, required) = table[String(bytes)] ?: throw BackupFormatException("not an archive")
+        if (required != null) {
+            if (passphrase.isNullOrEmpty()) throw SealedBackupException(UnreadableKind.PASSPHRASE_REQUIRED, "needs a passphrase")
+            if (passphrase != required) throw SealedBackupException(UnreadableKind.DECRYPTION_FAILED, "wrong passphrase")
+        }
+        return contents
+    }
 }
 
 class RecordingReplacer(private val store: MemoryDocumentStore, var fail: Boolean = false) : DocumentReplacer {

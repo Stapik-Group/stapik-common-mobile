@@ -1,5 +1,6 @@
 package pl.stapik.common.app
 
+import pl.stapik.common.cloud.SealedBackupException
 import pl.stapik.common.document.BackupContents
 import pl.stapik.common.document.BackupFormatException
 import pl.stapik.common.document.SafetyCopies
@@ -9,11 +10,18 @@ import pl.stapik.common.model.EnvelopeFormatException
 import pl.stapik.common.model.SchemaGate
 import pl.stapik.common.sync.DocumentReplacer
 import pl.stapik.common.sync.SyncOutcome
+import pl.stapik.common.sync.UnreadableKind
 
 /** Why an import was refused before anything was changed. */
 sealed interface ImportRejection {
     /** The file is not a valid backup archive. */
     data class NotABackup(val reason: String) : ImportRejection
+
+    /** The file is protected with a passphrase and none was given. */
+    data object PassphraseRequired : ImportRejection
+
+    /** The passphrase is wrong, or the protected file was modified. */
+    data object WrongPassphrase : ImportRejection
 
     /** The backup comes from another app. */
     data class WrongApp(val found: String) : ImportRejection
@@ -66,12 +74,20 @@ class ImportService(
     private val schemaGate: SchemaGate? = null,
     private val validate: (DocumentEnvelope) -> Unit = {},
 ) {
-    /** [bytes] is the content of an archive file chosen by the user. */
-    suspend fun importArchive(bytes: ByteArray): ImportResult {
+    /** [bytes] is the content of an archive file chosen by the user; [passphrase] opens a protected one. */
+    suspend fun importArchive(bytes: ByteArray, passphrase: String? = null): ImportResult {
         val contents = try {
-            archive.read(bytes)
+            archive.read(bytes, passphrase)
         } catch (e: BackupFormatException) {
             return ImportResult.Rejected(ImportRejection.NotABackup(e.message.orEmpty()))
+        } catch (e: SealedBackupException) {
+            return ImportResult.Rejected(
+                when (e.kind) {
+                    UnreadableKind.PASSPHRASE_REQUIRED -> ImportRejection.PassphraseRequired
+                    UnreadableKind.DECRYPTION_FAILED -> ImportRejection.WrongPassphrase
+                    else -> ImportRejection.NotABackup(e.message.orEmpty())
+                },
+            )
         }
         return import(contents)
     }

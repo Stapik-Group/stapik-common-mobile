@@ -21,6 +21,7 @@ kotlin {
 dependencies {
     api(project(":core:sync"))
     api(project(":core:document"))
+    api(project(":core:cloud")) // passphrase protection of exported archives
 
     testImplementation(libs.junit)
 }

@@ -143,4 +143,15 @@ class ImportServiceTest {
         val result = f.service.importArchive("nonsense".toByteArray())
         assertTrue((result as ImportResult.Rejected).reason is ImportRejection.NotABackup)
     }
+
+    @Test
+    fun `a protected archive needs the right passphrase`() = runBlocking {
+        val f = Fixture()
+        val bytes = f.archive.write(f.contents(), "secret")
+        assertEquals(ImportResult.Rejected(ImportRejection.PassphraseRequired), f.service.importArchive(bytes))
+        assertEquals(ImportResult.Rejected(ImportRejection.WrongPassphrase), f.service.importArchive(bytes, "nope"))
+        assertTrue(f.replacer.replaced.isEmpty())
+        assertTrue(f.service.importArchive(bytes, "secret") is ImportResult.Imported)
+        assertTrue(f.store.document!!.content.toJson().contains("theirs"))
+    }
 }
