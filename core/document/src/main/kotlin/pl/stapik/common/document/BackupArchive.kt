@@ -9,9 +9,10 @@ import java.time.format.DateTimeParseException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import pl.stapik.common.model.DocumentEnvelope
 import pl.stapik.common.model.EnvelopeFormatException
 
@@ -25,50 +26,48 @@ class BackupFormatException(message: String, cause: Throwable? = null) : Excepti
  *   cloud (so it is also a valid desktop-format file); null if the app had none.
  * @property mobileOnly device-only data by store name, each in the format of
  *   [MobileOnlyStore.exportJson].
+ * @property appVersion version of the app that made the archive (the desktop requires the field).
  */
 data class BackupContents(
     val appId: String,
     val createdAt: Instant,
     val document: String?,
     val mobileOnly: Map<String, String> = emptyMap(),
+    val appVersion: String = "",
 )
-
-@Serializable
-internal data class BackupManifest(
-    val formatVersion: Int,
-    val appId: String,
-    val createdAt: String,
-    val files: List<BackupManifestFile>,
-)
-
-@Serializable
-internal data class BackupManifestFile(val path: String, val sha256: String, val size: Long)
 
 /**
- * Manual export/import format (plan 4.6): a ZIP with `manifest.json`, `document.json` and
- * `mobile-only/<name>.json`. The manifest lists every file with its SHA-256, so a damaged or
- * edited archive is rejected instead of half-imported.
+ * Manual export/import format (plan 4.6), the same ZIP as the desktop's `stapik-archive`
+ * (`stapik-common/docs/archive.md`), so the document can travel between phone and desktop in both
+ * directions.
  *
- * Reading is defensive: only the known entry names are accepted (no paths, so no path traversal),
- * the number and size of entries are capped, and the document must be a valid envelope.
+ * - `manifest.json`: `format` ("stapik-archive"), `formatVersion`, `app`, `appVersion`, `createdAt`,
+ *   `assets` (always empty here) as on the desktop, plus `files`: path, size and SHA-256 of every
+ *   entry this library writes (`document.json`, `mobile-only/<name>.json`).
+ * - `document.json`: the document exactly as in the cloud.
+ * - `mobile-only/<name>.json`: device-only data. The desktop ignores these entries.
  *
- * Not included here: passphrase encryption of the archive (`stapik-e2e`), which needs the crypto
- * library chosen in a later phase. The archive is plain, so the app should say so before saving it.
+ * Reading is defensive: only known entry names are accepted (no paths, so no path traversal), the
+ * number and size of entries are capped, and the document must be a valid envelope. An archive made
+ * by this library (it has `files`) must match its manifest exactly. An archive made by the desktop
+ * (no `files`) is accepted for its `document.json`; its `settings.json` and `assets/` are skipped,
+ * since phones keep neither.
+ *
+ * Not included here: encryption. A protected export wraps the whole file (see `BackupSealing`).
  */
 object BackupArchive {
     const val FORMAT_VERSION = 1
+    const val FORMAT_NAME = "stapik-archive"
     const val DEFAULT_MAX_ENTRY_BYTES: Long = 32L * 1024 * 1024
 
     private const val MANIFEST = "manifest.json"
     private const val DOCUMENT = "document.json"
+    private const val DESKTOP_SETTINGS = "settings.json"
+    private const val DESKTOP_ASSETS_PREFIX = "assets/"
     private const val MOBILE_PREFIX = "mobile-only/"
     private const val MAX_ENTRIES = 200
     private val NAME = Regex("[A-Za-z0-9._-]{1,100}")
     private val MOBILE_PATH = Regex("mobile-only/([A-Za-z0-9._-]{1,100})\\.json")
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-    }
 
     /** Writes the archive to [out]. Does not close [out]. */
     fun write(out: OutputStream, contents: BackupContents) {
@@ -78,15 +77,31 @@ object BackupArchive {
             require(NAME.matches(name)) { "Invalid store name: '$name'" }
             files["$MOBILE_PREFIX$name.json"] = text.toByteArray(Charsets.UTF_8)
         }
-        val manifest = BackupManifest(
-            formatVersion = FORMAT_VERSION,
-            appId = contents.appId,
-            createdAt = contents.createdAt.toString(),
-            files = files.map { (path, bytes) -> BackupManifestFile(path, sha256(bytes), bytes.size.toLong()) },
+        val createdAt = contents.createdAt.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+        val manifest = JsonObject(
+            mapOf(
+                "format" to JsonPrimitive(FORMAT_NAME),
+                "formatVersion" to JsonPrimitive(FORMAT_VERSION),
+                "app" to JsonPrimitive(contents.appId),
+                "appVersion" to JsonPrimitive(contents.appVersion),
+                "createdAt" to JsonPrimitive(createdAt.toString()),
+                "assets" to JsonArray(emptyList()),
+                "files" to JsonArray(
+                    files.map { (path, bytes) ->
+                        JsonObject(
+                            mapOf(
+                                "path" to JsonPrimitive(path),
+                                "sha256" to JsonPrimitive(sha256(bytes)),
+                                "size" to JsonPrimitive(bytes.size.toLong()),
+                            ),
+                        )
+                    },
+                ),
+            ),
         )
         val zip = ZipOutputStream(out)
-        zip.putEntry(MANIFEST, json.encodeToString(BackupManifest.serializer(), manifest).toByteArray(Charsets.UTF_8), contents.createdAt)
-        for ((path, bytes) in files) zip.putEntry(path, bytes, contents.createdAt)
+        zip.putEntry(MANIFEST, manifest.toString().toByteArray(Charsets.UTF_8), createdAt)
+        for ((path, bytes) in files) zip.putEntry(path, bytes, createdAt)
         zip.finish()
         zip.flush()
     }
@@ -99,51 +114,100 @@ object BackupArchive {
         val entries = readEntries(input, maxEntryBytes)
         val manifestBytes = entries[MANIFEST] ?: throw BackupFormatException("manifest.json is missing")
         val manifest = try {
-            json.decodeFromString(BackupManifest.serializer(), manifestBytes.toString(Charsets.UTF_8))
-        } catch (e: SerializationException) {
+            Json.parseToJsonElement(manifestBytes.toString(Charsets.UTF_8)) as? JsonObject
+                ?: throw BackupFormatException("manifest.json is not valid")
+        } catch (e: IllegalArgumentException) {
             throw BackupFormatException("manifest.json is not valid", e)
         }
-        if (manifest.formatVersion != FORMAT_VERSION) {
-            throw BackupFormatException("Unsupported backup format version: ${manifest.formatVersion}")
+        if (text(manifest, "format") != FORMAT_NAME) throw BackupFormatException("This is not a Stapik archive")
+        val formatVersion = (manifest["formatVersion"] as? JsonPrimitive)?.content?.toIntOrNull()
+            ?: throw BackupFormatException("manifest.json has no format version")
+        if (formatVersion > FORMAT_VERSION) {
+            throw BackupFormatException("The archive was made by a newer version of the application")
         }
+        val appId = text(manifest, "app") ?: throw BackupFormatException("manifest.json has no app name")
+        val appVersion = text(manifest, "appVersion").orEmpty()
         val createdAt = try {
-            Instant.parse(manifest.createdAt)
+            Instant.parse(text(manifest, "createdAt") ?: throw BackupFormatException("manifest.json has no creation time"))
         } catch (e: DateTimeParseException) {
             throw BackupFormatException("Invalid creation time in manifest", e)
         }
 
-        val listed = manifest.files.map { it.path }
-        if (listed.toSet().size != listed.size) throw BackupFormatException("Manifest lists a file twice")
-        val unlisted = entries.keys - MANIFEST - listed.toSet()
+        val files = manifest["files"]
+        return if (files == null) {
+            readDesktopArchive(entries, appId, appVersion, createdAt)
+        } else {
+            readOwnArchive(entries, files, appId, appVersion, createdAt)
+        }
+    }
+
+    /** An archive made by the desktop: only `document.json` is used. */
+    private fun readDesktopArchive(
+        entries: Map<String, ByteArray>,
+        appId: String,
+        appVersion: String,
+        createdAt: Instant,
+    ): BackupContents {
+        if (entries.keys.any { MOBILE_PATH.matches(it) }) throw BackupFormatException("Archive has unlisted files")
+        val bytes = entries[DOCUMENT] ?: throw BackupFormatException("document.json is missing")
+        return BackupContents(appId, createdAt, parseDocument(bytes), emptyMap(), appVersion)
+    }
+
+    /** An archive made by this library: every entry must match the manifest. */
+    private fun readOwnArchive(
+        entries: Map<String, ByteArray>,
+        filesElement: kotlinx.serialization.json.JsonElement,
+        appId: String,
+        appVersion: String,
+        createdAt: Instant,
+    ): BackupContents {
+        val list = (filesElement as? JsonArray) ?: throw BackupFormatException("manifest.json is not valid")
+        class Listed(val path: String, val sha256: String, val size: Long)
+        val listed = list.map { element ->
+            val obj = element as? JsonObject ?: throw BackupFormatException("manifest.json is not valid")
+            Listed(
+                text(obj, "path") ?: throw BackupFormatException("manifest.json is not valid"),
+                text(obj, "sha256") ?: throw BackupFormatException("manifest.json is not valid"),
+                (obj["size"] as? JsonPrimitive)?.content?.toLongOrNull() ?: throw BackupFormatException("manifest.json is not valid"),
+            )
+        }
+        val paths = listed.map { it.path }
+        if (paths.toSet().size != paths.size) throw BackupFormatException("Manifest lists a file twice")
+        val unlisted = entries.keys - MANIFEST - paths.toSet()
         if (unlisted.isNotEmpty()) throw BackupFormatException("Archive has unlisted files: $unlisted")
 
         var document: String? = null
         val mobileOnly = LinkedHashMap<String, String>()
-        for (file in manifest.files) {
+        for (file in listed) {
             val bytes = entries[file.path] ?: throw BackupFormatException("Listed file is missing: ${file.path}")
             if (bytes.size.toLong() != file.size || sha256(bytes) != file.sha256) {
                 throw BackupFormatException("File does not match the manifest: ${file.path}")
             }
-            val text = bytes.toString(Charsets.UTF_8)
-            when {
-                file.path == DOCUMENT -> {
-                    try {
-                        DocumentEnvelope.parse(text)
-                    } catch (e: EnvelopeFormatException) {
-                        throw BackupFormatException("document.json is not a valid document", e)
-                    }
-                    document = text
-                }
-                else -> {
-                    val name = MOBILE_PATH.matchEntire(file.path)?.groupValues?.get(1)
-                        ?: throw BackupFormatException("Unexpected file in manifest: ${file.path}")
-                    mobileOnly[name] = text
-                }
+            if (file.path == DOCUMENT) {
+                document = parseDocument(bytes)
+            } else {
+                val name = MOBILE_PATH.matchEntire(file.path)?.groupValues?.get(1)
+                    ?: throw BackupFormatException("Unexpected file in manifest: ${file.path}")
+                mobileOnly[name] = bytes.toString(Charsets.UTF_8)
             }
         }
-        return BackupContents(manifest.appId, createdAt, document, mobileOnly)
+        return BackupContents(appId, createdAt, document, mobileOnly, appVersion)
     }
 
+    private fun parseDocument(bytes: ByteArray): String {
+        val text = bytes.toString(Charsets.UTF_8)
+        try {
+            DocumentEnvelope.parse(text)
+        } catch (e: EnvelopeFormatException) {
+            throw BackupFormatException("document.json is not a valid document", e)
+        }
+        return text
+    }
+
+    private fun text(obj: JsonObject, name: String): String? =
+        (obj[name] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+    /** Entries that are read; desktop-only entries (`settings.json`, `assets/...`) are skipped unread. */
     private fun readEntries(input: InputStream, maxEntryBytes: Long): Map<String, ByteArray> {
         val entries = LinkedHashMap<String, ByteArray>()
         try {
@@ -151,6 +215,7 @@ object BackupArchive {
             while (true) {
                 val entry = zip.nextEntry ?: break
                 val name = entry.name
+                if (name == DESKTOP_SETTINGS || name.startsWith(DESKTOP_ASSETS_PREFIX)) continue
                 if (entry.isDirectory || !isAllowedName(name)) throw BackupFormatException("Unexpected entry: '$name'")
                 if (entries.size >= MAX_ENTRIES) throw BackupFormatException("Too many entries")
                 if (name in entries) throw BackupFormatException("Duplicate entry: '$name'")

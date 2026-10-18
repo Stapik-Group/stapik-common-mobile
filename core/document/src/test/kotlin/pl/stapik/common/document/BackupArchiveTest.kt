@@ -8,6 +8,7 @@ import java.util.zip.ZipOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackupArchiveTest {
@@ -138,5 +139,73 @@ class BackupArchiveTest {
     @Test
     fun `store names with path characters cannot be exported`() {
         assertThrows(IllegalArgumentException::class.java) { archive(contents(mobile = mapOf("../x" to "{}"))) }
+    }
+
+    @Test
+    fun `app name, version and time are in the desktop manifest`() {
+        val manifest = String(entriesOf(archive(contents().copy(appVersion = "1.4.0")))["manifest.json"]!!, Charsets.UTF_8)
+        assertTrue(manifest.contains("\"format\":\"stapik-archive\""))
+        assertTrue(manifest.contains("\"app\":\"budgeting\""))
+        assertTrue(manifest.contains("\"appVersion\":\"1.4.0\""))
+        assertTrue(manifest.contains("\"createdAt\":\"2026-10-18T10:00:00Z\""))
+        assertTrue(manifest.contains("\"assets\":[]"))
+        assertEquals("1.4.0", read(archive(contents().copy(appVersion = "1.4.0"))).appVersion)
+    }
+
+    @Test
+    fun `an archive made by the desktop is read for its document`() {
+        val manifest = """{
+          "format": "stapik-archive", "formatVersion": 1, "app": "budgeting", "appVersion": "2.3.0",
+          "createdAt": "2026-10-17T20:15:00Z",
+          "assets": [{"filename":"receipt.png","mimeType":"image/png","sizeBytes":3,"checksumSha256":"00"}]
+        }"""
+        val bytes = zip(
+            linkedMapOf(
+                "document.json" to document.toByteArray(),
+                "settings.json" to """{"theme":"dark"}""".toByteArray(),
+                "assets/receipt.png" to byteArrayOf(1, 2, 3),
+                "manifest.json" to manifest.toByteArray(),
+            ),
+        )
+        val result = read(bytes)
+        assertEquals("budgeting", result.appId)
+        assertEquals("2.3.0", result.appVersion)
+        assertEquals(Instant.parse("2026-10-17T20:15:00Z"), result.createdAt)
+        assertEquals(document, result.document)
+        assertEquals(emptyMap<String, String>(), result.mobileOnly)
+    }
+
+    @Test
+    fun `a desktop archive with many large assets is not rejected for its assets`() {
+        val entries = linkedMapOf<String, ByteArray>(
+            "manifest.json" to """{"format":"stapik-archive","formatVersion":1,"app":"x","appVersion":"1","createdAt":"2026-10-17T20:15:00Z","assets":[]}""".toByteArray(),
+            "document.json" to document.toByteArray(),
+        )
+        repeat(250) { entries["assets/file$it.bin"] = ByteArray(100) }
+        assertEquals(document, read(zip(entries), max = 50_000).document)
+    }
+
+    @Test
+    fun `a desktop archive without a document is rejected`() {
+        val manifest = """{"format":"stapik-archive","formatVersion":1,"app":"x","appVersion":"1","createdAt":"2026-10-17T20:15:00Z","assets":[]}"""
+        assertRejected(zip(mapOf("manifest.json" to manifest.toByteArray())))
+    }
+
+    @Test
+    fun `a zip with another format name is rejected`() {
+        val manifest = """{"format":"other","formatVersion":1,"app":"x","appVersion":"1","createdAt":"2026-10-17T20:15:00Z","assets":[]}"""
+        assertRejected(zip(mapOf("manifest.json" to manifest.toByteArray(), "document.json" to document.toByteArray())))
+    }
+
+    @Test
+    fun `a desktop manifest cannot smuggle mobile-only files in`() {
+        val manifest = """{"format":"stapik-archive","formatVersion":1,"app":"x","appVersion":"1","createdAt":"2026-10-17T20:15:00Z","assets":[]}"""
+        assertRejected(zip(mapOf("manifest.json" to manifest.toByteArray(), "document.json" to document.toByteArray(), "mobile-only/p.json" to "{}".toByteArray())))
+    }
+
+    @Test
+    fun `fractional seconds are dropped from the creation time`() {
+        val result = read(archive(contents().copy(createdAt = Instant.parse("2026-10-18T10:00:00.789Z"))))
+        assertEquals(Instant.parse("2026-10-18T10:00:00Z"), result.createdAt)
     }
 }
