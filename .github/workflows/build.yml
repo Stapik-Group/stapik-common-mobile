@@ -1,0 +1,54 @@
+# Reusable: builds and tests a Gradle project. Used by this repository's own checks and, by tag, by the apps.
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      gradle-tasks:
+        description: Gradle tasks to run
+        type: string
+        default: "test assembleDebug"
+    secrets:
+      SUBMODULES_TOKEN:
+        description: Token that can read private submodules (only needed when the library repository is private)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/sdkmanager" | head -n 1)
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test
+        run: |
+          chmod +x gradlew
+          ./gradlew ${{ inputs.gradle-tasks }}
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/"
+          if-no-files-found: ignore

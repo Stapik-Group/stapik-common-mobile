@@ -1,0 +1,14 @@
+# A version tag is checked once more. The library has nothing to attach: an app pins the tag as a submodule.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml

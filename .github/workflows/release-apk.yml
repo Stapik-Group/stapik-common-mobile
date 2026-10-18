@@ -1,0 +1,100 @@
+# Reusable: builds a signed release APK of an app and attaches it to the GitHub release of the tag.
+# Called from the app by tag, see templates/github/release-apk.yml.
+name: Release APK
+
+on:
+  workflow_call:
+    inputs:
+      apk-name:
+        description: Name of the APK without the version, e.g. StapikBudgetingMobile
+        type: string
+        required: true
+      gradle-task:
+        type: string
+        default: assembleRelease
+      apk-path:
+        type: string
+        default: app/build/outputs/apk/release/app-release.apk
+    secrets:
+      KEYSTORE_BASE64:
+        required: true
+      KEYSTORE_PASSWORD:
+        required: true
+      KEY_ALIAS:
+        required: true
+      KEY_PASSWORD:
+        required: true
+      SUBMODULES_TOKEN:
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Accept Android SDK licenses
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/sdkmanager" | head -n 1)
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "Missing KEYSTORE_BASE64 secret" >&2
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+
+      - name: Test
+        run: |
+          chmod +x gradlew
+          ./gradlew test
+
+      - name: Build release APK
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew ${{ inputs.gradle-task }}
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp "${{ inputs.apk-path }}" "dist/${{ inputs.apk-name }}-${{ github.ref_name }}.apk"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.apk-name }}-${{ github.ref_name }}
+          path: dist/*.apk
+
+      - name: Attach APK to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.apk --clobber
+          else
+            echo "No release for $TAG - APK is available only as a workflow artifact"
+          fi

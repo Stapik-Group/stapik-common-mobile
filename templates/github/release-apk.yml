@@ -1,0 +1,20 @@
+# Copy to .github/workflows/release-apk.yml of an app. A tag v* builds, signs and attaches the APK.
+# Secrets of the app repository: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+# (and SUBMODULES_TOKEN only if stapik-common-mobile is private).
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Pin @v... to the release of stapik-common-mobile that the submodule is on.
+    uses: Stapik-Group/stapik-common-mobile/.github/workflows/release-apk.yml@v0.1.0
+    with:
+      apk-name: StapikExampleMobile   # change to the app's name
+    secrets: inherit
