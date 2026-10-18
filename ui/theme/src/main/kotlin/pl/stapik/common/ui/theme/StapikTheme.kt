@@ -32,6 +32,8 @@ data class ColorOnColor(val background: Color, val content: Color)
 data class StapikColors(
     val palette: ThemePalette,
     val textMuted: Color,
+    /** Background of buttons. */
+    val button: Color,
     val borderLight: Color,
     val borderDark: Color,
     val syncSyncing: Color,
@@ -52,6 +54,7 @@ private fun ColorPair.color() = ColorOnColor(background.color(), foreground.colo
 fun ThemePalette.toStapikColors(): StapikColors = StapikColors(
     palette = this,
     textMuted = textMuted.color(),
+    button = button.color(),
     borderLight = borderLight.color(),
     borderDark = borderDark.color(),
     syncSyncing = syncSyncing.color(),

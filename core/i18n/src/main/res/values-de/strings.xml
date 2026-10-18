@@ -24,7 +24,7 @@
     <string name="connect_key">API-Schlüssel</string>
     <string name="connect_passphrase">Passphrase für Ende-zu-Ende-Verschlüsselung (optional)</string>
     <string name="connect_key_show">Schlüssel und Passphrase anzeigen</string>
-    <string name="connect_key_hide">Schlüssel verbergen</string>
+    <string name="connect_key_hide">Schlüssel und Passphrase verbergen</string>
     <string name="connect_insecure_warning">Unsichere Verbindung: Schlüssel und Daten werden unverschlüsselt gesendet.</string>
     <string name="connect_invalid_url">Die Adresse muss mit http:// oder https:// beginnen</string>
     <string name="connect_submit">Verbinden</string>
@@ -51,4 +51,26 @@
     <string name="action_close">Schließen</string>
     <string name="connect_passphrase_hint">Der Server sieht nur verschlüsselte Daten. Ohne diese Passphrase lassen sie sich nicht wiederherstellen, daher auf jedem Gerät dieselbe eingeben.</string>
     <string name="sync_api_key_expiring">Ihr Cloud-API-Schlüssel läuft am %1$s ab. Erstellen Sie im Cloud-Panel einen neuen und tragen Sie ihn in den Verbindungseinstellungen ein.</string>
+    <string name="menu_settings">Einstellungen</string>
+    <string name="menu_connect">Mit Cloud verbinden</string>
+    <string name="menu_theme">Thema</string>
+    <string name="menu_about">Info</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_author">Autor: %1$s</string>
+    <string name="about_website">Webseite</string>
+    <string name="action_back">Zurück</string>
+    <string name="load_loading">Wird geladen…</string>
+    <string name="load_error_corrupted">Die Daten auf diesem Gerät sind beschädigt und können nicht gelesen werden.</string>
+    <string name="load_error_model_mismatch">Die Daten wurden von einer anderen Version der App gespeichert und können nicht gelesen werden.</string>
+    <string name="load_error_unknown">Die Daten konnten nicht geladen werden.</string>
+    <string name="choice_title">Daten auf diesem Gerät und in der Cloud</string>
+    <string name="choice_message">Sowohl dieses Gerät als auch die Cloud enthalten Daten. Welche Version möchten Sie behalten?</string>
+    <string name="choice_use_cloud">Cloud-Version verwenden (Daten auf diesem Gerät ersetzen)</string>
+    <string name="choice_send_local">Version dieses Geräts an die Cloud senden</string>
+    <string name="choice_read_only">Dieser Schlüssel ist schreibgeschützt, daher können die Daten dieses Geräts nicht gesendet werden.</string>
+    <string name="connect_connected">Verbunden: %1$s</string>
+    <string name="connect_scope_read_write">Lese-Schreib-Schlüssel: Sie können Daten ändern.</string>
+    <string name="connect_scope_read_only">Schreibgeschützter Schlüssel: Änderungen bleiben auf diesem Gerät.</string>
+    <string name="connect_disconnect_title">Von der Cloud trennen?</string>
+    <string name="connect_disconnect_message">Die App arbeitet dann lokal. Die Daten bleiben auf diesem Gerät und Sie können sie weiter bearbeiten.</string>
 </resources>

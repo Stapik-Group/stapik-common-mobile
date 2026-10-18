@@ -22,7 +22,7 @@ object ThemePalettes {
 
     val classic = ThemePalette(
         id = ThemeId.CLASSIC, isDark = false, usesBevel = true, cornerRadiusDp = 0,
-        background = 0xC0C0C0, surface = WHITE, text = 0x000000, textMuted = 0x404040,
+        background = 0xC0C0C0, surface = WHITE, text = 0x000000, textMuted = 0x404040, button = 0xC0C0C0,
         border = 0x808080, borderLight = 0xFFFFFF, borderDark = 0x808080,
         accent = 0x000080, onAccent = WHITE,
         syncSyncing = 0x000080, syncConflict = 0x804000, syncError = 0x800000,
@@ -36,7 +36,7 @@ object ThemePalettes {
 
     val classicPink = ThemePalette(
         id = ThemeId.CLASSIC_PINK, isDark = false, usesBevel = true, cornerRadiusDp = 0,
-        background = 0xF4B6DD, surface = 0xF9CBE6, text = 0x4A0E4E, textMuted = 0x8C3A72,
+        background = 0xF4B6DD, surface = 0xF9CBE6, text = 0x4A0E4E, textMuted = 0x8C3A72, button = 0xF4B6DD,
         border = 0x8C3A72, borderLight = 0xFFE0F3, borderDark = 0x8C3A72,
         accent = 0x7B2FF7, onAccent = WHITE,
         syncSyncing = 0x7B2FF7, syncConflict = 0xB5836B, syncError = 0xA0003C,
@@ -50,7 +50,7 @@ object ThemePalettes {
 
     val modern = ThemePalette(
         id = ThemeId.MODERN, isDark = false, usesBevel = false, cornerRadiusDp = 12,
-        background = 0xF5F5F7, surface = WHITE, text = 0x1C1C1E, textMuted = 0x6E6E73,
+        background = 0xF5F5F7, surface = WHITE, text = 0x1C1C1E, textMuted = 0x6E6E73, button = WHITE,
         border = 0xE2E2E5, borderLight = 0xE2E2E5, borderDark = 0xE2E2E5,
         accent = 0x007AFF, onAccent = WHITE,
         syncSyncing = 0x007AFF, syncConflict = 0xFF9500, syncError = 0xFF3B30,
@@ -64,7 +64,7 @@ object ThemePalettes {
 
     val dark = ThemePalette(
         id = ThemeId.DARK, isDark = true, usesBevel = false, cornerRadiusDp = 12,
-        background = 0x1C1C1E, surface = 0x2C2C2E, text = 0xF2F2F7, textMuted = 0x98989F,
+        background = 0x1C1C1E, surface = 0x2C2C2E, text = 0xF2F2F7, textMuted = 0x98989F, button = 0x2C2C2E,
         border = 0x3A3A3C, borderLight = 0x3A3A3C, borderDark = 0x3A3A3C,
         accent = 0x0A84FF, onAccent = WHITE,
         syncSyncing = 0x0A84FF, syncConflict = 0xFF9F0A, syncError = 0xFF453A,
@@ -78,7 +78,7 @@ object ThemePalettes {
 
     val neoclassic = ThemePalette(
         id = ThemeId.NEOCLASSIC, isDark = false, usesBevel = false, cornerRadiusDp = 3,
-        background = 0xECE9D8, surface = 0xFBFAF4, text = 0x000000, textMuted = 0x5A5A52,
+        background = 0xECE9D8, surface = 0xFBFAF4, text = 0x000000, textMuted = 0x5A5A52, button = 0xDDD9C8,
         border = 0x7F9DB9, borderLight = 0x7F9DB9, borderDark = 0x003C74,
         accent = 0x316AC5, onAccent = WHITE,
         syncSyncing = 0x316AC5, syncConflict = 0xB86E00, syncError = 0xC8321E,

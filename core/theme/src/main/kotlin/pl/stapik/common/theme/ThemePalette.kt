@@ -42,6 +42,8 @@ data class ThemePalette(
     val surface: Rgb,
     val text: Rgb,
     val textMuted: Rgb,
+    /** Background of buttons (the desktop's `stapik_btn_*`; the window colour in the classic themes). */
+    val button: Rgb,
     val border: Rgb,
     val borderLight: Rgb,
     val borderDark: Rgb,

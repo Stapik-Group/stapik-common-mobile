@@ -24,7 +24,7 @@
     <string name="connect_key">Klucz API</string>
     <string name="connect_passphrase">Hasło szyfrowania end-to-end (opcjonalne)</string>
     <string name="connect_key_show">Pokaż klucz i hasło</string>
-    <string name="connect_key_hide">Ukryj klucz</string>
+    <string name="connect_key_hide">Ukryj klucz i hasło</string>
     <string name="connect_insecure_warning">Połączenie niezabezpieczone: klucz i dane są wysyłane bez szyfrowania.</string>
     <string name="connect_invalid_url">Adres musi zaczynać się od http:// lub https://</string>
     <string name="connect_submit">Połącz</string>
@@ -51,4 +51,26 @@
     <string name="action_close">Zamknij</string>
     <string name="connect_passphrase_hint">Serwer widzi tylko zaszyfrowane dane. Bez tego hasła nie da się ich odzyskać, więc wpisz to samo na każdym urządzeniu.</string>
     <string name="sync_api_key_expiring">Twój klucz API chmury wygasa %1$s. Utwórz nowy w panelu chmury i wpisz go w ustawieniach połączenia.</string>
+    <string name="menu_settings">Ustawienia</string>
+    <string name="menu_connect">Połącz z chmurą</string>
+    <string name="menu_theme">Motyw</string>
+    <string name="menu_about">O programie</string>
+    <string name="about_version">Wersja %1$s</string>
+    <string name="about_author">Autor: %1$s</string>
+    <string name="about_website">Strona internetowa</string>
+    <string name="action_back">Wstecz</string>
+    <string name="load_loading">Ładowanie…</string>
+    <string name="load_error_corrupted">Dane na tym urządzeniu są uszkodzone i nie można ich odczytać.</string>
+    <string name="load_error_model_mismatch">Dane zostały zapisane przez inną wersję aplikacji i nie można ich odczytać.</string>
+    <string name="load_error_unknown">Nie udało się wczytać danych.</string>
+    <string name="choice_title">Dane na tym urządzeniu i w chmurze</string>
+    <string name="choice_message">Zarówno to urządzenie, jak i chmura mają dane. Którą wersję zachować?</string>
+    <string name="choice_use_cloud">Użyj wersji z chmury (zastąp dane na tym urządzeniu)</string>
+    <string name="choice_send_local">Wyślij wersję z tego urządzenia do chmury</string>
+    <string name="choice_read_only">Ten klucz jest tylko do odczytu, więc danych z tego urządzenia nie można wysłać.</string>
+    <string name="connect_connected">Połączono: %1$s</string>
+    <string name="connect_scope_read_write">Klucz do odczytu i zapisu: możesz zmieniać dane.</string>
+    <string name="connect_scope_read_only">Klucz tylko do odczytu: zmiany zostają na tym urządzeniu.</string>
+    <string name="connect_disconnect_title">Odłączyć od chmury?</string>
+    <string name="connect_disconnect_message">Aplikacja będzie działać lokalnie. Dane zostają na tym urządzeniu i nadal możesz je edytować.</string>
 </resources>

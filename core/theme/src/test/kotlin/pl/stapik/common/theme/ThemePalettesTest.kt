@@ -43,6 +43,7 @@ class ThemePalettesTest {
             assertTrue("${p.id} text/background", Contrast.ratio(p.text, p.background) >= 4.5)
             assertTrue("${p.id} text/surface", Contrast.ratio(p.text, p.surface) >= 4.5)
             // 3.0 is the WCAG limit for large text and controls: the desktop's Modern accent (white on 007AFF) is 4.0.
+            assertTrue("${p.id} text/button", Contrast.ratio(p.text, p.button) >= 4.5)
             assertTrue("${p.id} onAccent/accent", Contrast.ratio(p.onAccent, p.accent) >= 3.0)
         }
     }
