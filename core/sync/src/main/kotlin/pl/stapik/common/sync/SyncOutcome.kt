@@ -28,6 +28,9 @@ sealed interface SyncOutcome {
 
     /** The cloud document cannot be read; nothing was written anywhere. */
     data class RemoteUnreadable(val reason: String, val kind: UnreadableKind = UnreadableKind.OTHER) : SyncOutcome
+
+    /** The local document was written by a newer version of the app; the edit was refused. */
+    data class NewerSchema(val found: Int, val supported: Int) : SyncOutcome
 }
 
 /** Coarse state for the UI. */

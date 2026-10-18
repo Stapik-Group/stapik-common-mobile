@@ -14,6 +14,7 @@ import pl.stapik.common.model.DocumentDecodeException
 import pl.stapik.common.model.DocumentEnvelope
 import pl.stapik.common.model.EnvelopeFormatException
 import pl.stapik.common.model.LocalDocument
+import pl.stapik.common.model.SchemaGate
 import pl.stapik.common.model.SlotKey
 
 /**
@@ -33,7 +34,8 @@ class SyncEngine<T>(
     private val store: DocumentStore,
     private val cloudProvider: suspend () -> CloudGateway?,
     private val clock: Clock,
-) {
+    private val schemaGate: SchemaGate? = null,
+) : DocumentReplacer {
     private val mutex = Mutex()
     private val mutableStatus = MutableStateFlow(SyncStatus.IDLE)
 
@@ -44,15 +46,34 @@ class SyncEngine<T>(
 
     /**
      * Applies [transform] to the local document, saves it locally, then tries to synchronise.
-     * The edit is kept whatever the returned outcome is.
+     * The edit is kept whatever the returned outcome is, except [SyncOutcome.NewerSchema]: a
+     * document written with a newer schema than the app understands is never edited.
      */
     suspend fun edit(transform: (T) -> T): SyncOutcome {
         mutex.withLock {
             val local = loadLocal()
+            if (schemaGate != null) {
+                val newer = schemaGate.newerVersionOf(local.content)
+                if (newer != null) return SyncOutcome.NewerSchema(newer, schemaGate.supported)
+            }
             val updated = transform(codec.decode(local.content))
             val now = clock.instant()
             val envelope = codec.encode(updated, local.content, now.truncatedTo(ChronoUnit.SECONDS).toString())
             store.save(local.edited(envelope, now))
+        }
+        return sync()
+    }
+
+    /**
+     * Replaces the whole document (import of a backup, restore). The new content is stamped as the
+     * latest local change, saved, then synchronised like an edit.
+     */
+    override suspend fun replaceDocument(envelope: DocumentEnvelope): SyncOutcome {
+        mutex.withLock {
+            val local = loadLocal()
+            val now = clock.instant()
+            val stamped = envelope.withPayload(envelope.payload, now.truncatedTo(ChronoUnit.SECONDS).toString())
+            store.save(local.edited(stamped, now))
         }
         return sync()
     }
@@ -204,7 +225,7 @@ class SyncEngine<T>(
         SyncOutcome.KeptLocalUnsynced -> SyncStatus.IDLE
         is SyncOutcome.Offline -> SyncStatus.OFFLINE
         is SyncOutcome.NeedsFirstConnectionChoice -> SyncStatus.NEEDS_CHOICE
-        is SyncOutcome.AuthProblem, is SyncOutcome.RemoteUnreadable -> SyncStatus.ERROR
+        is SyncOutcome.AuthProblem, is SyncOutcome.RemoteUnreadable, is SyncOutcome.NewerSchema -> SyncStatus.ERROR
     }
 
     private companion object {

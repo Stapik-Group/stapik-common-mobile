@@ -3,6 +3,7 @@ package pl.stapik.common.sync
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,6 +11,8 @@ import org.junit.Test
 import pl.stapik.common.model.CloudScope
 import pl.stapik.common.model.DocumentCodec
 import pl.stapik.common.model.DocumentEnvelope
+import pl.stapik.common.model.LocalDocument
+import pl.stapik.common.model.SchemaGate
 import pl.stapik.common.model.SlotKey
 
 class SyncEngineTest {
@@ -212,5 +215,49 @@ class SyncEngineTest {
         assertTrue(f.store.document!!.dirty)
         assertTrue(f.gateway.writes.isEmpty())
         assertEquals(CloudScope.READ_ONLY, f.store.document!!.scope)
+    }
+
+    private val gate = SchemaGate(1) { env -> (env.payload["schema"] as? JsonPrimitive)?.content?.toIntOrNull() }
+
+    private fun gatedEngine(f: Fixture) = SyncEngine(slot, codec, f.store, { null }, f.clock, gate)
+
+    private fun stored(schema: Int) = LocalDocument(
+        DocumentEnvelope.parse("""{"lastUpdate":"$t0","payload":{"schema":$schema,"items":["a"]}}"""),
+    )
+
+    @Test
+    fun `edit of a document with a newer schema is refused and changes nothing`() = runBlocking {
+        val f = fixture().apply { store.document = stored(schema = 2) }
+        val before = f.store.document
+        assertEquals(SyncOutcome.NewerSchema(2, 1), gatedEngine(f).edit { Notes(listOf("b")) })
+        assertEquals(before, f.store.document)
+    }
+
+    @Test
+    fun `edit of a document with the supported schema works and keeps the schema key`() = runBlocking {
+        val f = fixture().apply { store.document = stored(schema = 1) }
+        assertEquals(SyncOutcome.LocalOnly, gatedEngine(f).edit { Notes(listOf("b")) })
+        assertEquals(Notes(listOf("b")), codec.decode(f.store.document!!.content))
+        assertEquals(JsonPrimitive(1), f.store.document!!.content.payload["schema"])
+    }
+
+    @Test
+    fun `replaceDocument stamps the new content as the latest local change`() = runBlocking {
+        val f = fixture().apply { connected = false }
+        val imported = DocumentEnvelope.parse(envelopeJson("2020-01-01T00:00:00Z", listOf("x", "y")))
+        assertEquals(SyncOutcome.LocalOnly, f.engine.replaceDocument(imported))
+        val saved = f.store.document!!
+        assertTrue(saved.dirty)
+        assertEquals("2026-10-16T12:00:00Z", saved.content.lastUpdate)
+        assertEquals(Notes(listOf("x", "y")), f.engine.load())
+    }
+
+    @Test
+    fun `replaceDocument is pushed to the cloud like an edit`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, listOf("old")) }
+        f.engine.sync()
+        val imported = DocumentEnvelope.parse(envelopeJson("2020-01-01T00:00:00Z", listOf("new")))
+        assertEquals(SyncOutcome.Synchronized, f.engine.replaceDocument(imported))
+        assertEquals(Notes(listOf("new")), decode(f.gateway.document))
     }
 }

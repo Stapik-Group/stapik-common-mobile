@@ -33,3 +33,8 @@ interface DocumentStore {
 
     suspend fun saveConflictCopy(copy: ConflictCopy)
 }
+
+/** Replaces the whole local document; implemented by [SyncEngine], separate so importers can be tested without an engine. */
+interface DocumentReplacer {
+    suspend fun replaceDocument(envelope: DocumentEnvelope): SyncOutcome
+}
