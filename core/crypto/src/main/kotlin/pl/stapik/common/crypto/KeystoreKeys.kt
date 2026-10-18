@@ -34,6 +34,13 @@ object KeystoreKeys {
         return generator.generateKey()
     }
 
+    /** The key under [alias] if it exists; never creates one (used to read data of the old apps). */
+    @Synchronized
+    fun find(alias: String): SecretKey? {
+        val keyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
+        return keyStore.getKey(alias, null) as? SecretKey
+    }
+
     /** Removes the key. Everything encrypted with it becomes unreadable. */
     @Synchronized
     fun delete(alias: String) {
