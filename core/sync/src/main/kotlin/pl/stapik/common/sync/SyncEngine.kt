@@ -94,6 +94,9 @@ class SyncEngine<T>(
         return outcome
     }
 
+    /** Whether there are local changes not yet sent to the cloud. */
+    suspend fun hasPendingChanges(): Boolean = mutex.withLock { loadLocal().dirty }
+
     private suspend fun loadLocal(): LocalDocument<DocumentEnvelope> =
         store.load() ?: LocalDocument(DocumentEnvelope.empty(""))
 
