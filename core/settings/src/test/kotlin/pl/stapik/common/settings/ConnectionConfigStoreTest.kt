@@ -22,8 +22,12 @@ class ConnectionConfigStoreTest {
         dir = Files.createTempDirectory("config-test")
     }
 
-    private fun store(schema: Int = 1, legacy: LegacyConfigReader? = null, aesKey: SecretKey = key) =
-        ConnectionConfigStore(dir, AesGcmCipher("connection".toByteArray()) { aesKey }, schema, legacy)
+    private fun store(
+        schema: Int = 1,
+        legacy: LegacyConfigReader? = null,
+        aesKey: SecretKey = key,
+        migration: ConfigMigration = ConfigMigration.KeepAsIs,
+    ) = ConnectionConfigStore(dir, AesGcmCipher("connection".toByteArray()) { aesKey }, schema, legacy, migration = migration)
 
     @Test
     fun `nothing saved`() {
@@ -53,9 +57,38 @@ class ConnectionConfigStoreTest {
     }
 
     @Test
-    fun `older schema is reset and deleted`() {
+    fun `older schema keeps the key and the passphrase`() {
         store(schema = 1).save(config)
-        assertEquals(ConfigLoad.SchemaReset(1), store(schema = 2).load())
+        val loaded = store(schema = 2).load() as ConfigLoad.Loaded
+        assertEquals("secret-key", loaded.config.apiKey)
+        assertEquals("phrase", loaded.config.passphrase)
+        assertEquals(ConfigLoad.NewerSchema(2), store(schema = 1).load())
+    }
+
+    @Test
+    fun `older schema is migrated once and saved under the current one`() {
+        store(schema = 1).save(config)
+        val stored = mutableListOf<Int>()
+        val migration = ConfigMigration { schema, old -> stored += schema; old }
+        store(schema = 2, migration = migration).load()
+        store(schema = 2, migration = migration).load()
+        assertEquals(listOf(1), stored)
+    }
+
+    @Test
+    fun `a migration can change the config`() {
+        store(schema = 1).save(config)
+        val migration = ConfigMigration { _, old -> CloudConfig(old.apiUrl + "/v2", old.apiKey, old.passphrase) }
+        val loaded = store(schema = 2, migration = migration).load() as ConfigLoad.Loaded
+        assertEquals("https://cloud.example/v2", loaded.config.apiUrl)
+        assertEquals("https://cloud.example/v2", (store(schema = 2).load() as ConfigLoad.Loaded).config.apiUrl)
+    }
+
+    @Test
+    fun `a migration can reject the config which is then deleted`() {
+        store(schema = 1).save(config)
+        val rejecting = ConfigMigration { _, _ -> null }
+        assertEquals(ConfigLoad.SchemaReset(1), store(schema = 2, migration = rejecting).load())
         assertEquals(ConfigLoad.None, store(schema = 2).load())
     }
 

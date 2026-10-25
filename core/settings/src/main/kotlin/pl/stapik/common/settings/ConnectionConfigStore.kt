@@ -17,8 +17,8 @@ sealed interface ConfigLoad {
     data class Loaded(val config: CloudConfig, val migratedFromLegacy: Boolean = false) : ConfigLoad
 
     /**
-     * The saved configuration came from an older schema and was deleted ([ApiSchemaGuard]); the
-     * user has to connect again.
+     * The saved configuration came from an older schema, its [ConfigMigration] declared it unusable
+     * and it was deleted; the user has to connect again.
      */
     data class SchemaReset(val storedVersion: Int) : ConfigLoad
 
@@ -27,6 +27,14 @@ sealed interface ConfigLoad {
 
     /** The file and its backups cannot be read (for example the Keystore key is gone). */
     data object Unreadable : ConfigLoad
+}
+
+fun interface ConfigMigration {
+    fun migrate(storedSchema: Int, config: CloudConfig): CloudConfig?
+
+    companion object {
+        val KeepAsIs = ConfigMigration { _, config -> config }
+    }
 }
 
 /**
@@ -45,9 +53,10 @@ interface LegacyConfigReader {
  * Connection settings (API URL, key, optional end-to-end passphrase) in one encrypted file with
  * backups.
  *
- * [schemaVersion] is the app's [ApiSchemaGuard]: when the stored version is lower the
- * configuration is deleted and the user connects again. This is the emergency lever for changes
- * that make old configurations invalid. A higher stored version is never deleted.
+ * [schemaVersion]: when the stored version is lower, [migration] carries the configuration over and
+ * it is saved under the current version. By default nothing is lost; a migration that returns null
+ * is the emergency lever for changes that make old configurations invalid, and the configuration
+ * is then deleted. A higher stored version is never deleted.
  *
  * Blocking I/O; the caller chooses the dispatcher. Not thread-safe.
  */
@@ -58,6 +67,7 @@ class ConnectionConfigStore(
     private val legacy: LegacyConfigReader? = null,
     name: String = "connection.json",
     backupCount: Int = 2,
+    private val migration: ConfigMigration = ConfigMigration.KeepAsIs,
 ) {
     private val file = BackedFile(directory, name, cipher, backupCount)
 
@@ -71,13 +81,20 @@ class ConnectionConfigStore(
         }
         if (stored == null) return migrateLegacy()
         return when {
-            stored.schema < schemaVersion -> {
-                file.delete()
-                ConfigLoad.SchemaReset(stored.schema)
-            }
+            stored.schema < schemaVersion -> upgrade(stored)
             stored.schema > schemaVersion -> ConfigLoad.NewerSchema(stored.schema)
             else -> ConfigLoad.Loaded(stored.config)
         }
+    }
+
+    private fun upgrade(stored: Stored): ConfigLoad {
+        val migrated = migration.migrate(stored.schema, stored.config)
+        if (migrated == null) {
+            file.delete()
+            return ConfigLoad.SchemaReset(stored.schema)
+        }
+        save(migrated)
+        return ConfigLoad.Loaded(migrated)
     }
 
     private fun migrateLegacy(): ConfigLoad {
