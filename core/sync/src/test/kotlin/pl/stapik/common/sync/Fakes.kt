@@ -4,6 +4,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
+import kotlinx.coroutines.CompletableDeferred
 import pl.stapik.common.model.CloudInfo
 import pl.stapik.common.model.CloudScope
 import pl.stapik.common.model.DocumentEnvelope
@@ -28,6 +29,9 @@ class FakeCloudGateway : CloudGateway {
     /** Runs at the start of every write, before the conflict check; lets a test change the server. */
     var onBeforeWrite: (() -> Unit)? = null
 
+    /** When set, [info] waits for it; lets a test hold a synchronisation half way. */
+    var gate: CompletableDeferred<Unit>? = null
+
     val writes = mutableListOf<String>()
     private var stamp = Instant.parse("2026-10-20T00:00:00Z")
 
@@ -36,6 +40,7 @@ class FakeCloudGateway : CloudGateway {
     }
 
     override suspend fun info(): CloudInfo {
+        gate?.await()
         failIfNeeded()
         return info
     }

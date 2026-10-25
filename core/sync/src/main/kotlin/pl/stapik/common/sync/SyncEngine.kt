@@ -83,10 +83,10 @@ class SyncEngine<T>(
     }
 
     /** Synchronises with the cloud, if one is configured. [choice] answers [SyncOutcome.NeedsFirstConnectionChoice]. */
-    suspend fun sync(choice: FirstConnectionChoice? = null): SyncOutcome {
+    suspend fun sync(choice: FirstConnectionChoice? = null): SyncOutcome = mutex.withLock {
         mutableStatus.value = SyncStatus.SYNCING
-        val outcome = try {
-            mutex.withLock { runSync(choice) }
+        try {
+            runSync(choice).also { mutableStatus.value = it.toStatus() }
         } catch (e: CancellationException) {
             mutableStatus.value = SyncStatus.IDLE
             throw e
@@ -94,8 +94,6 @@ class SyncEngine<T>(
             mutableStatus.value = SyncStatus.ERROR
             throw e
         }
-        mutableStatus.value = outcome.toStatus()
-        return outcome
     }
 
     /** Whether there are local changes not yet sent to the cloud. */

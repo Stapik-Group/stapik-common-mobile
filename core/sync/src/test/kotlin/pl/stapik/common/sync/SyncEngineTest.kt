@@ -1,7 +1,11 @@
 package pl.stapik.common.sync
 
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
@@ -154,6 +158,23 @@ class SyncEngineTest {
     fun `rate limiting is reported as offline with the retry hint`() = runBlocking {
         val f = fixture().apply { gateway.failure = CloudError.RateLimited(30) }
         assertEquals(SyncOutcome.Offline(CloudError.RateLimited(30)), f.engine.edit { Notes(listOf("a")) })
+    }
+
+    @Test
+    fun `a sync cancelled while it waits does not hide the one that is running`() = runBlocking {
+        val f = fixture()
+        val gate = CompletableDeferred<Unit>()
+        f.gateway.gate = gate
+        val running = launch { f.engine.sync() }
+        yield()
+        assertEquals(SyncStatus.SYNCING, f.engine.status.value)
+        val waiting = launch { f.engine.sync() }
+        yield()
+        waiting.cancelAndJoin()
+        assertEquals(SyncStatus.SYNCING, f.engine.status.value)
+        gate.complete(Unit)
+        running.join()
+        assertEquals(SyncStatus.IDLE, f.engine.status.value)
     }
 
     @Test
