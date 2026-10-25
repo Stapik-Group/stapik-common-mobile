@@ -13,6 +13,8 @@ import pl.stapik.common.model.DocumentDecodeException
 import pl.stapik.common.sync.FirstConnectionChoice
 import pl.stapik.common.sync.SyncEngine
 import pl.stapik.common.sync.SyncOutcome
+import pl.stapik.common.sync.SyncRetry
+import pl.stapik.common.sync.SyncRetryPolicy
 
 enum class LoadErrorKind {
     /** The stored file and its backups cannot be read; offer restoring a safety copy or an import. */
@@ -38,6 +40,7 @@ sealed interface DocumentUiState<out T> {
  * @param scope runs the delayed sync of [editDebounced]; without it every edit syncs at once.
  * @param debounceMillis how long [editDebounced] waits for the next edit before syncing.
  * @param waiter waits for the given milliseconds; replaced in tests.
+ * @param retry scheduled after a sync that could not reach the cloud, cancelled by any other outcome.
  * @param connected whether a cloud is configured now.
  */
 class DocumentController<T>(
@@ -45,6 +48,7 @@ class DocumentController<T>(
     private val scope: CoroutineScope? = null,
     private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS,
     private val waiter: suspend (Long) -> Unit = { delay(it) },
+    private val retry: SyncRetry = SyncRetry.None,
     private val connected: suspend () -> Boolean,
 ) {
     private val mutableDocument = MutableStateFlow<DocumentUiState<T>>(DocumentUiState.Loading)
@@ -130,6 +134,7 @@ class DocumentController<T>(
     }
 
     private suspend fun finish(outcome: SyncOutcome) {
+        if (SyncRetryPolicy.isWorthRetrying(outcome)) retry.schedule() else retry.cancel()
         if (outcome.isConflictResolution()) {
             resolvedNotice = outcome
             lastOutcome = SyncOutcome.Synchronized

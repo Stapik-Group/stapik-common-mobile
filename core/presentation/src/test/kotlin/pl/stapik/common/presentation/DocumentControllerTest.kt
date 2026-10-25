@@ -30,6 +30,7 @@ import pl.stapik.common.sync.FirstConnectionChoice
 import pl.stapik.common.sync.RemoteDocument
 import pl.stapik.common.sync.SyncEngine
 import pl.stapik.common.sync.SyncOutcome
+import pl.stapik.common.sync.SyncRetry
 
 class DocumentControllerTest {
     private val clock = Clock.fixed(Instant.parse("2026-10-18T10:00:00Z"), ZoneOffset.UTC)
@@ -189,6 +190,40 @@ class DocumentControllerTest {
         assertEquals(SyncOutcome.NewerSchema(2, 1), d.controller.editDebounced { items("b") })
         assertEquals(null, d.controller.flushPendingSync())
         assertEquals(0, d.gateway.writes)
+    }
+
+    private class RecordingRetry : SyncRetry {
+        val calls = mutableListOf<String>()
+        override fun schedule() { calls += "schedule" }
+        override fun cancel() { calls += "cancel" }
+    }
+
+    @Test
+    fun `an unreachable cloud schedules a retry and a good sync cancels it`() = runBlocking {
+        val retry = RecordingRetry()
+        val store = Store()
+        val gateway = Gateway()
+        val engine = SyncEngine(SlotKey("a.json"), codec, store, { gateway }, clock)
+        val controller = DocumentController(engine, retry = retry) { true }
+        controller.load()
+        gateway.failure = CloudError.Network("down")
+        controller.edit { items("a") }
+        gateway.failure = null
+        controller.sync()
+        assertEquals(listOf("schedule", "cancel"), retry.calls)
+    }
+
+    @Test
+    fun `a problem the user must fix is not retried`() = runBlocking {
+        val retry = RecordingRetry()
+        val store = Store()
+        val gateway = Gateway()
+        val engine = SyncEngine(SlotKey("a.json"), codec, store, { gateway }, clock)
+        val controller = DocumentController(engine, retry = retry) { true }
+        controller.load()
+        gateway.failure = CloudError.Unauthorized
+        controller.edit { items("a") }
+        assertEquals(listOf("cancel"), retry.calls)
     }
 
     private fun cloudWith(vararg v: String) = RemoteDocument(
