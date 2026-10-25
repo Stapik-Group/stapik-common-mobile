@@ -1,11 +1,18 @@
 package pl.stapik.common.cloud
 
+import java.io.IOException
+
+/** @property maxResponseBytes the transport gives up with [ResponseTooLargeException] when the body is longer; null means no limit. */
 class HttpRequest(
     val method: String,
     val url: String,
     val headers: Map<String, String> = emptyMap(),
     val body: String? = null,
+    val maxResponseBytes: Long? = null,
 )
+
+class ResponseTooLargeException(val limitBytes: Long) :
+    IOException("The response is larger than the limit of $limitBytes bytes")
 
 /** @property headers response headers with lower-case names. */
 class HttpResponse(

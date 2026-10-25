@@ -40,6 +40,7 @@ class HttpCloudGateway(
     private val sleeper: suspend (Long) -> Unit = { delay(it) },
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val gzipThresholdBytes: Int = 32 * 1024,
+    private val maxResponseBytes: Long = DEFAULT_MAX_RESPONSE_BYTES,
 ) : CloudGateway {
 
     private class Known(val updatedAt: String, val etag: String?)
@@ -60,7 +61,7 @@ class HttpCloudGateway(
     private fun knownFor(slot: SlotKey): Known? = known[slot]
 
     override suspend fun info(): CloudInfo {
-        val response = send(HttpRequest("GET", config.baseUrl + "me", headers()))
+        val response = send(newRequest("GET", config.baseUrl + "me"))
         expectOk(response)
         val root = parseObject(response.body)
         val scope = CloudScope.fromWire(JsonProbe.string(root, "scope"))
@@ -69,7 +70,7 @@ class HttpCloudGateway(
     }
 
     override suspend fun read(slot: SlotKey): RemoteDocument? {
-        val response = send(HttpRequest("GET", documentUrl(slot), headers()))
+        val response = send(newRequest("GET", documentUrl(slot)))
         if (response.status == 404) {
             remember(slot, null)
             return null
@@ -85,7 +86,7 @@ class HttpCloudGateway(
         val etag = etagFor(slot, baseline)
         val body = runOnWorker { requestBody(slot, content, baseline) }
         val extra = if (etag != null) mapOf("if-match" to etag) else emptyMap()
-        val response = send(HttpRequest("PUT", documentUrl(slot), headers() + extra, body))
+        val response = send(newRequest("PUT", documentUrl(slot), extra, body))
         if (response.status == 409) {
             remember(slot, null)
             throw CloudException(CloudError.Conflict)
@@ -105,7 +106,7 @@ class HttpCloudGateway(
         val remembered = knownFor(slot)
         if (remembered != null && remembered.updatedAt == baseline && remembered.etag != null) return remembered.etag
 
-        val response = send(HttpRequest("GET", documentUrl(slot), headers()))
+        val response = send(newRequest("GET", documentUrl(slot)))
         if (response.status == 404) {
             remember(slot, null)
             throw CloudException(CloudError.Conflict)
@@ -142,6 +143,9 @@ class HttpCloudGateway(
 
     private fun documentUrl(slot: SlotKey): String = config.baseUrl + "documents/" + slot.value
 
+    private fun newRequest(method: String, url: String, extraHeaders: Map<String, String> = emptyMap(), body: String? = null) =
+        HttpRequest(method, url, headers() + extraHeaders, body, maxResponseBytes)
+
     private fun headers(): Map<String, String> =
         mapOf("x-api-key" to config.apiKey, "accept" to "application/json", "content-type" to "application/json")
 
@@ -175,6 +179,8 @@ class HttpCloudGateway(
     private suspend fun execute(request: HttpRequest): HttpResponse {
         val response = try {
             runOnWorker { transport.execute(request) }
+        } catch (e: ResponseTooLargeException) {
+            throw CloudException(CloudError.Unreadable(TOO_LARGE_REASON), e)
         } catch (e: IOException) {
             throw CloudException(CloudError.Network(e.message), e)
         } catch (e: IllegalArgumentException) {
@@ -200,6 +206,7 @@ class HttpCloudGateway(
 
     companion object {
         const val MAX_AUTO_WAIT_SECONDS = 30L
+        const val DEFAULT_MAX_RESPONSE_BYTES = 16L * 1024 * 1024
         private const val TOO_LARGE_REASON = "The document is too large to process on this device"
     }
 }

@@ -26,6 +26,48 @@ class OkHttpTransportTest {
     }
 
     @Test
+    fun `a body within the limit is read`() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("x".repeat(100)))
+            server.start()
+            val response = OkHttpTransport().execute(HttpRequest("GET", server.url("/a").toString(), maxResponseBytes = 100))
+            assertEquals(100, response.body.length)
+        }
+    }
+
+    @Test
+    fun `a body over the limit is refused`() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("x".repeat(101)))
+            server.start()
+            val error = assertFailsWith<ResponseTooLargeException> {
+                OkHttpTransport().execute(HttpRequest("GET", server.url("/a").toString(), maxResponseBytes = 100))
+            }
+            assertEquals(100L, error.limitBytes)
+        }
+    }
+
+    @Test
+    fun `a chunked body over the limit is refused`() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setChunkedBody("x".repeat(5000), 512))
+            server.start()
+            assertFailsWith<ResponseTooLargeException> {
+                OkHttpTransport().execute(HttpRequest("GET", server.url("/a").toString(), maxResponseBytes = 1000))
+            }
+        }
+    }
+
+    @Test
+    fun `without a limit the whole body is read`() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("x".repeat(5000)))
+            server.start()
+            assertEquals(5000, OkHttpTransport().execute(HttpRequest("GET", server.url("/a").toString())).body.length)
+        }
+    }
+
+    @Test
     fun `does not follow a redirect to another host`() {
         MockWebServer().use { target ->
             MockWebServer().use { origin ->

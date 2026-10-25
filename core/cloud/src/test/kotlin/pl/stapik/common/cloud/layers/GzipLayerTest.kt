@@ -35,6 +35,18 @@ class GzipLayerTest {
     }
 
     @Test
+    fun `decompression stops at the limit`() {
+        val sealed = GzipLayer.seal(big)
+        assertEquals(big, GzipLayer.open(sealed, big.length.toLong()))
+        assertFailsWith<CloudException> { GzipLayer.open(sealed, big.length - 1L) }
+    }
+
+    @Test
+    fun `decompression limit is below what a phone can hold`() {
+        assertTrue(GzipLayer.MAX_DECOMPRESSED_BYTES <= 64L * 1024 * 1024)
+    }
+
+    @Test
     fun `gzip then e2e round trip`() {
         val layers = ContentLayers(SlotKey("planner.json"), "pw")
         val sealed = layers.seal(big)

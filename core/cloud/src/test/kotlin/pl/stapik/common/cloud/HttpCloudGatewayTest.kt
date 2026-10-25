@@ -192,6 +192,22 @@ class HttpCloudGatewayTest {
     }
 
     @Test
+    fun `a response over the limit is an unreadable document`() {
+        server.failWith = ResponseTooLargeException(1024)
+        assertTrue(errorOf { gateway().read(slot) } is CloudError.Unreadable)
+    }
+
+    @Test
+    fun `every request carries the response limit`() = runBlocking {
+        val g = gateway()
+        val first = g.write(slot, """{"v":1}""", "")
+        g.read(slot)
+        g.info()
+        g.write(slot, """{"v":2}""", first.updatedAt)
+        assertTrue(server.requests.all { it.maxResponseBytes == HttpCloudGateway.DEFAULT_MAX_RESPONSE_BYTES })
+    }
+
+    @Test
     fun `short rate limit is waited out`() = runBlocking {
         server.rateLimits += "2"
         assertNull(gateway().read(slot))

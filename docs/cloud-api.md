@@ -12,6 +12,7 @@ Oznaczenia: **[kod]** – zaimplementowane i objęte testami, **[założenie]** 
 - `PUT {baza}documents/{slot}` – zapis. **[kod]**
 - Każde żądanie niesie `x-api-key`. Klucz nie trafia do logów ani do eksportu. **[kod]**
 - `http://` jest dozwolone, ale UI ostrzega, że klucz idzie nieszyfrowany. **[kod]** (`ApiUrlStatus`)
+- Treść odpowiedzi jest czytana do limitu 16 MiB (`HttpCloudGateway.DEFAULT_MAX_RESPONSE_BYTES`, też po zdjęciu kompresji HTTP). Dłuższa odpowiedź przerywa odczyt i kończy się `Unreadable`. Desktop ma ten sam mechanizm (`maxResponseBytes` żądania), ale dla dokumentów go nie ustawia. **[kod]**
 - Przekierowania HTTP nie są wykonywane, także w kliencie przekazanym do `OkHttpTransport`: OkHttp przy zmianie hosta zdejmuje tylko `Authorization`, więc `x-api-key` poleciałby do hosta wskazanego w `Location`. **[kod]**
 
 ## Dokument
@@ -65,7 +66,7 @@ Zapis: najpierw kompresja, potem (przy ustawionej frazie) szyfrowanie. Odczyt: o
 - od 32 KiB tekstu w UTF-8; mniejsze lecą bez zmian,
 - jeśli base64 nie jest krótszy od tekstu, wysyłany jest tekst,
 - próg musi być taki jak na desktopie, bo starsze desktopy nie czytają skompresowanych dokumentów,
-- odczyt ma limit 256 MiB po rozpakowaniu.
+- odczyt ma limit 32 MiB po rozpakowaniu (desktop: 256 MiB, więc dokument większy niż 32 MiB powstały na desktopie nie otworzy się na telefonie, tylko da `Unreadable`).
 
 ### Szyfrowanie `stapik-e2e` **[kod; zgodność z libsodium sprawdzona na wektorach]**
 
