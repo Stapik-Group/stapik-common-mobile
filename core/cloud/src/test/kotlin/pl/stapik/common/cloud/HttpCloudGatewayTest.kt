@@ -141,6 +141,12 @@ class HttpCloudGatewayTest {
     }
 
     @Test
+    fun `a redirect is a server error`() {
+        server.forcedStatus = 302
+        assertEquals(CloudError.ServerError(302), errorOf { gateway().read(slot) })
+    }
+
+    @Test
     fun `io failure is a network error`() {
         server.failWith = IOException("down")
         assertEquals(CloudError.Network("down"), errorOf { gateway().read(slot) })

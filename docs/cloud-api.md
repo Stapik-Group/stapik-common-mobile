@@ -12,6 +12,7 @@ Oznaczenia: **[kod]** – zaimplementowane i objęte testami, **[założenie]** 
 - `PUT {baza}documents/{slot}` – zapis. **[kod]**
 - Każde żądanie niesie `x-api-key`. Klucz nie trafia do logów ani do eksportu. **[kod]**
 - `http://` jest dozwolone, ale UI ostrzega, że klucz idzie nieszyfrowany. **[kod]** (`ApiUrlStatus`)
+- Przekierowania HTTP nie są wykonywane, także w kliencie przekazanym do `OkHttpTransport`: OkHttp przy zmianie hosta zdejmuje tylko `Authorization`, więc `x-api-key` poleciałby do hosta wskazanego w `Location`. **[kod]**
 
 ## Dokument
 
@@ -43,6 +44,7 @@ Czy serwer przyjmuje jednocześnie `If-Match` i `clientLastKnownUpdate`: **[zał
 | `404` | brak dokumentu (tylko odczyt) |
 | `409` | `Conflict` |
 | `429` | `Retry-After` ≤ 30 s: klient czeka i ponawia raz; dłużej: `RateLimited(retryAfter)` |
+| `3xx` | `ServerError(kod)` – przekierowanie nie jest wykonywane; adres w ustawieniach ma wskazywać wprost na API |
 | inne ≥ 400 | `ServerError(kod)` |
 | brak odpowiedzi | `Network` |
 

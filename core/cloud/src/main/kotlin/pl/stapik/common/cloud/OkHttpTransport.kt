@@ -8,8 +8,13 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 /** [HttpTransport] on OkHttp. Share one [OkHttpClient] across the app. */
 class OkHttpTransport(
-    private val client: OkHttpClient = defaultClient(),
+    client: OkHttpClient = defaultClient(),
 ) : HttpTransport {
+
+    private val client: OkHttpClient = client.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
 
     override fun execute(request: HttpRequest): HttpResponse {
         val builder = Request.Builder().url(request.url)
