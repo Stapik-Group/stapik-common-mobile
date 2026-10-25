@@ -1,6 +1,7 @@
 package pl.stapik.common.sync
 
 import pl.stapik.common.model.CloudInfo
+import pl.stapik.common.model.CloudTimestamp
 import pl.stapik.common.model.LocalDocument
 
 /**
@@ -77,7 +78,7 @@ object SyncPlanner {
             else -> SyncPlan.UpToDate
         }
         is RemoteState.Present -> {
-            val remoteChanged = remote.updatedAt != local.cloudBaseline
+            val remoteChanged = !CloudTimestamp.sameInstant(remote.updatedAt, local.cloudBaseline)
             when {
                 !remoteChanged && !local.dirty -> SyncPlan.UpToDate
                 !remoteChanged ->

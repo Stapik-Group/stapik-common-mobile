@@ -27,6 +27,8 @@ Zapis: ciało `{"content": "<tekst>"}`; gdy klient zna wersję, dodatkowo `"clie
 
 Serwer ≥ 1.2.0 porównuje nagłówek `If-Match` z ETagiem dokumentu (cudzysłowiony SHA-256 treści) i odpowiada `409` przy braku lub nieaktualnym. **[kod po stronie klienta; zachowanie serwera: założenie z dokumentacji desktopu]**
 
+`updatedAt` i baza są porównywane jako chwile (`CloudTimestamp.sameInstant`), nie jako tekst: `Z`, `+00:00` i różna liczba cyfr ułamka sekundy to ten sam czas i nie dają fałszywego konfliktu ani dodatkowego GET. Tekst, który nie jest czasem, porównuje się jako tekst. **[kod]**
+
 Klient pamięta ETag z ostatniego odczytu lub zapisu każdego slotu:
 
 1. Zna `updatedAt` równe bazie, od której edytował → używa zapamiętanego ETagu.

@@ -135,6 +135,23 @@ class HttpCloudGatewayTest {
     }
 
     @Test
+    fun `a baseline in another notation of the same time needs no extra read`() = runBlocking {
+        val g = gateway()
+        val first = g.write(slot, """{"v":1}""", "")
+        g.write(slot, """{"v":2}""", respelled(first.updatedAt))
+        assertEquals(listOf("PUT", "PUT"), server.requests.map { it.method })
+    }
+
+    @Test
+    fun `a fresh gateway accepts a baseline in another notation of the same time`() = runBlocking {
+        val first = gateway().write(slot, """{"v":1}""", "")
+        gateway().write(slot, """{"v":2}""", respelled(first.updatedAt))
+        assertEquals(listOf("PUT", "GET", "PUT"), server.requests.map { it.method })
+    }
+
+    private fun respelled(updatedAt: String) = updatedAt.removeSuffix("Z") + ".000+00:00"
+
+    @Test
     fun `stale baseline is a conflict without a PUT`() {
         runBlocking { gateway().write(slot, """{"v":1}""", "") }
         val before = server.requests.size

@@ -13,6 +13,7 @@ import pl.stapik.common.cloud.layers.ContentLayers
 import pl.stapik.common.cloud.layers.JsonProbe
 import pl.stapik.common.model.CloudInfo
 import pl.stapik.common.model.CloudScope
+import pl.stapik.common.model.CloudTimestamp
 import pl.stapik.common.model.SlotKey
 import pl.stapik.common.sync.CloudError
 import pl.stapik.common.sync.CloudException
@@ -124,7 +125,7 @@ class HttpCloudGateway(
     private suspend fun etagFor(slot: SlotKey, baseline: String): String? {
         if (baseline.isEmpty()) return null
         val remembered = knownFor(slot)
-        if (remembered != null && remembered.updatedAt == baseline && remembered.etag != null) return remembered.etag
+        if (remembered != null && CloudTimestamp.sameInstant(remembered.updatedAt, baseline) && remembered.etag != null) return remembered.etag
 
         val response = send(newRequest("GET", documentUrl(slot)))
         if (response.status == 404) {
@@ -135,7 +136,7 @@ class HttpCloudGateway(
         val current = parseDocument(response)
         val etag = response.header("etag")
         remember(slot, Known(current.updatedAt, etag))
-        if (current.updatedAt != baseline) throw CloudException(CloudError.Conflict)
+        if (!CloudTimestamp.sameInstant(current.updatedAt, baseline)) throw CloudException(CloudError.Conflict)
         return etag
     }
 

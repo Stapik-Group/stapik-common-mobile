@@ -112,6 +112,13 @@ class SyncPlannerTest {
     }
 
     @Test
+    fun `the same cloud time in another notation is not a change`() {
+        val respelled = "2026-10-10T08:00:00.000+00:00"
+        assertEquals(SyncPlan.UpToDate, plan(synced(), remote = present(respelled)))
+        assertEquals(SyncPlan.PushLocal(keepRemoteAsConflictCopy = false), plan(synced(dirty = true), remote = present(respelled)))
+    }
+
+    @Test
     fun `a baseline without recorded identity is trusted`() {
         assertEquals(SyncPlan.UpToDate, plan(synced(identity = null), remote = present(t0)))
     }
