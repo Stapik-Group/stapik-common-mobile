@@ -2,11 +2,13 @@ package pl.stapik.common.cloud
 
 import java.io.IOException
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Test
 import org.junit.Assert.assertEquals
 import pl.stapik.common.cloud.assertFailsWith
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -14,6 +16,7 @@ import kotlinx.serialization.json.JsonObject
 import pl.stapik.common.model.CloudScope
 import pl.stapik.common.model.SlotKey
 import pl.stapik.common.sync.CloudError
+import kotlin.coroutines.CoroutineContext
 
 class HttpCloudGatewayTest {
     private val slot = SlotKey("budget.json")
@@ -28,6 +31,20 @@ class HttpCloudGatewayTest {
         sleeper = { sleeps += it },
         dispatcher = Dispatchers.Unconfined,
     )
+
+    private fun gatewayOn(dispatcher: CoroutineDispatcher, passphrase: String? = null) = HttpCloudGateway(
+        CloudConfig("https://cloud.example", "key-1", passphrase),
+        server,
+        sleeper = { sleeps += it },
+        dispatcher = dispatcher,
+    )
+
+    private fun countingDispatcher(counter: AtomicInteger) = object : CoroutineDispatcher() {
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            counter.incrementAndGet()
+            block.run()
+        }
+    }
 
     private fun errorOf(block: suspend () -> Unit): CloudError =
         assertFailsWith<pl.stapik.common.sync.CloudException> { runBlocking { block() } }.error
@@ -150,6 +167,28 @@ class HttpCloudGatewayTest {
     fun `io failure is a network error`() {
         server.failWith = IOException("down")
         assertEquals(CloudError.Network("down"), errorOf { gateway().read(slot) })
+    }
+
+    @Test
+    fun `running out of memory is an unreadable document`() {
+        server.failWithError = OutOfMemoryError()
+        val error = errorOf { gateway().read(slot) }
+        assertTrue(error is CloudError.Unreadable)
+    }
+
+    @Test
+    fun `reading hands the transport, parsing and decoding to the dispatcher`() {
+        server.content = """{"v":1}"""
+        val dispatches = AtomicInteger()
+        runBlocking { gatewayOn(countingDispatcher(dispatches), passphrase = "pw").read(slot) }
+        assertEquals(3, dispatches.get())
+    }
+
+    @Test
+    fun `writing hands sealing, the transport and parsing to the dispatcher`() {
+        val dispatches = AtomicInteger()
+        runBlocking { gatewayOn(countingDispatcher(dispatches), passphrase = "pw").write(slot, """{"v":1}""", "") }
+        assertEquals(3, dispatches.get())
     }
 
     @Test

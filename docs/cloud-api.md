@@ -48,6 +48,8 @@ Czy serwer przyjmuje jednocześnie `If-Match` i `clientLastKnownUpdate`: **[zał
 | inne ≥ 400 | `ServerError(kod)` |
 | brak odpowiedzi | `Network` |
 
+Żądanie, parsowanie odpowiedzi, kompresja i szyfrowanie (Argon2id) wykonują się na dispatcherze bramki (domyślnie `Dispatchers.IO`), nie na wątku wołającego. `OutOfMemoryError` w takim kroku kończy się `Unreadable`, nie przerwaniem procesu. **[kod]**
+
 Limit serwera: 600 żądań na minutę (nagłówki `X-RateLimit-*`). `X-Api-Key-Expires-At` (ISO-8601) jest przekazywane do `onApiKeyExpiry`, żeby UI mogło ostrzec o wygasaniu klucza. **[kod]**
 
 Zakres klucza: `READ_WRITE` pozwala zapisywać; każda inna wartość jest traktowana jak tylko do odczytu (`READ_ONLY` to **[założenie]**).

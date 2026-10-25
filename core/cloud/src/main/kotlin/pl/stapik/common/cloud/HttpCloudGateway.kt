@@ -77,18 +77,13 @@ class HttpCloudGateway(
         expectOk(response)
         val document = parseDocument(response)
         remember(slot, Known(document.updatedAt, response.header("etag")))
-        return RemoteDocument(layersFor(slot).open(document.content), document.updatedAt)
+        val content = runOnWorker { layersFor(slot).open(document.content) }
+        return RemoteDocument(content, document.updatedAt)
     }
 
     override suspend fun write(slot: SlotKey, content: String, baseline: String): RemoteDocument {
         val etag = etagFor(slot, baseline)
-        val sealed = layersFor(slot).seal(content)
-        val body = JsonObject(
-            buildMap {
-                put("content", JsonPrimitive(sealed))
-                if (baseline.isNotEmpty()) put("clientLastKnownUpdate", JsonPrimitive(baseline))
-            },
-        ).toString()
+        val body = runOnWorker { requestBody(slot, content, baseline) }
         val extra = if (etag != null) mapOf("if-match" to etag) else emptyMap()
         val response = send(HttpRequest("PUT", documentUrl(slot), headers() + extra, body))
         if (response.status == 409) {
@@ -123,13 +118,21 @@ class HttpCloudGateway(
         return etag
     }
 
+    private fun requestBody(slot: SlotKey, content: String, baseline: String): String =
+        JsonObject(
+            buildMap {
+                put("content", JsonPrimitive(layersFor(slot).seal(content)))
+                if (baseline.isNotEmpty()) put("clientLastKnownUpdate", JsonPrimitive(baseline))
+            },
+        ).toString()
+
     private class Wire(val content: String, val updatedAt: String)
 
-    private fun parseDocument(response: HttpResponse): Wire {
+    private suspend fun parseDocument(response: HttpResponse): Wire = runOnWorker {
         val root = parseObject(response.body)
         val content = JsonProbe.string(root, "content") ?: throw unreadable("The server sent a document without content")
         val updatedAt = JsonProbe.string(root, "updatedAt") ?: throw unreadable("The server sent a document without updatedAt")
-        return Wire(content, updatedAt)
+        Wire(content, updatedAt)
     }
 
     private fun parseObject(text: String): JsonObject =
@@ -171,7 +174,7 @@ class HttpCloudGateway(
 
     private suspend fun execute(request: HttpRequest): HttpResponse {
         val response = try {
-            withContext(dispatcher) { transport.execute(request) }
+            runOnWorker { transport.execute(request) }
         } catch (e: IOException) {
             throw CloudException(CloudError.Network(e.message), e)
         } catch (e: IllegalArgumentException) {
@@ -186,7 +189,17 @@ class HttpCloudGateway(
         return response
     }
 
+    private suspend fun <T> runOnWorker(block: () -> T): T =
+        withContext(dispatcher) {
+            try {
+                block()
+            } catch (e: OutOfMemoryError) {
+                throw CloudException(CloudError.Unreadable(TOO_LARGE_REASON), e)
+            }
+        }
+
     companion object {
         const val MAX_AUTO_WAIT_SECONDS = 30L
+        private const val TOO_LARGE_REASON = "The document is too large to process on this device"
     }
 }
