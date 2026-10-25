@@ -11,7 +11,7 @@ import java.time.Instant
  * @property content the app's domain document.
  * @property cloudBaseline `updatedAt` of the last synchronisation; empty means never synchronised.
  * @property dirty there are local changes not yet sent to the cloud.
- * @property modifiedAt when the document was last changed locally (input to the conflict policy).
+ * @property modifiedAt when the document was last changed locally, by the device clock; a hint for the UI, never used to decide a conflict.
  * @property scope key scope seen at the last contact with the cloud, if any.
  * @property cloudIdentity which cloud the baseline belongs to (URL + extensionId), if known.
  */

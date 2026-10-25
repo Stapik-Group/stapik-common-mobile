@@ -139,39 +139,25 @@ class SyncPlannerTest {
     }
 
     @Test
-    fun `both changed, local newer - push and keep cloud copy`() {
-        assertEquals(
-            SyncPlan.PushLocal(true),
-            plan(synced(dirty = true, modified = "2026-10-13T08:00:00Z"), remote = present(t1)),
-        )
+    fun `both changed - the cloud wins and the local version becomes a conflict copy whatever the clocks say`() {
+        val localTimes = listOf(null, "2026-10-11T08:00:00Z", "2026-10-13T08:00:00Z", "2099-01-01T00:00:00Z")
+        val cloudTimes = listOf(t1, "2026-10-14T08:00:00Z", "not-a-time")
+        for (modified in localTimes) {
+            for (updatedAt in cloudTimes) {
+                assertEquals(
+                    "local $modified, cloud $updatedAt",
+                    SyncPlan.UseRemote(true),
+                    plan(synced(dirty = true, modified = modified), remote = present(updatedAt)),
+                )
+            }
+        }
     }
 
     @Test
-    fun `both changed, cloud newer - take cloud and keep local copy`() {
-        assertEquals(
-            SyncPlan.UseRemote(true),
-            plan(synced(dirty = true, modified = "2026-10-11T08:00:00Z"), remote = present(t1)),
-        )
-    }
-
-    @Test
-    fun `both changed, local newer but read-only key - take cloud and keep local copy`() {
+    fun `both changed with a read-only key - the cloud wins as well`() {
         assertEquals(
             SyncPlan.UseRemote(true),
             plan(synced(dirty = true, modified = "2026-10-13T08:00:00Z"), remote = present(t1), cloud = ro),
-        )
-    }
-
-    @Test
-    fun `both changed, no local modification time - local wins`() {
-        assertEquals(SyncPlan.PushLocal(true), plan(synced(dirty = true), remote = present(t1)))
-    }
-
-    @Test
-    fun `both changed, unparseable cloud time - local wins`() {
-        assertEquals(
-            SyncPlan.PushLocal(true),
-            plan(synced(dirty = true, modified = "2026-10-13T08:00:00Z"), remote = present("not-a-time")),
         )
     }
 

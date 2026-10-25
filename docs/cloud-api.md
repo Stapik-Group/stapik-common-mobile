@@ -34,6 +34,8 @@ Klient pamięta ETag z ostatniego odczytu lub zapisu każdego slotu:
 3. `409` na PUT → konflikt (silnik powtarza do 3 razy, potem wygrywa serwer, a lokalna wersja zostaje jako kopia konfliktu).
 4. Brak dokumentu przy niepustej bazie → konflikt.
 
+O tym, kto wygrywa, nie decyduje zegar. Gdy zmieniły się obie strony (serwer względem bazy i lokalny dokument), zostaje wersja z chmury, a lokalna trafia do kopii konfliktu; wynik to `ServerWon`. `modifiedAt` lokalnego dokumentu jest tylko podpowiedzią dla UI. Desktop rozstrzyga inaczej: porównuje `lastUpdate` z kopert obu stron (czas edycji, nie czas serwera), więc po stronie desktopu rozstrzygnięcie nadal zależy od zegarów urządzeń.
+
 Czy serwer przyjmuje jednocześnie `If-Match` i `clientLastKnownUpdate`: **[założenie]**, sprawdzone tylko na atrapie serwera.
 
 ## Limity i błędy

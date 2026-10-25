@@ -1,6 +1,5 @@
 package pl.stapik.common.sync
 
-import java.time.Instant
 import pl.stapik.common.model.CloudInfo
 import pl.stapik.common.model.LocalDocument
 
@@ -9,7 +8,8 @@ import pl.stapik.common.model.LocalDocument
  *
  * The user is asked only on the first connection to a cloud, and only when both sides hold data.
  * In every other case the decision is automatic and the losing version is never dropped: the plan
- * says when it must be kept as a conflict copy.
+ * says when it must be kept as a conflict copy. No clock takes part: when both sides changed since
+ * the baseline, the cloud wins and the local version becomes a conflict copy.
  */
 object SyncPlanner {
 
@@ -83,17 +83,8 @@ object SyncPlanner {
                 !remoteChanged ->
                     if (canWrite) SyncPlan.PushLocal(keepRemoteAsConflictCopy = false) else SyncPlan.KeepLocalUnsynced
                 !local.dirty -> SyncPlan.UseRemote(keepLocalAsConflictCopy = false)
-                // Both sides changed: the newer one wins, the other becomes a conflict copy.
-                canWrite && localIsNewer(local, remote) -> SyncPlan.PushLocal(keepRemoteAsConflictCopy = true)
                 else -> SyncPlan.UseRemote(keepLocalAsConflictCopy = true)
             }
         }
-    }
-
-    /** Local wins when we cannot compare the times (missing or unparseable), like the calendar app does. */
-    private fun localIsNewer(local: LocalDocument<*>, remote: RemoteState.Present): Boolean {
-        val localTime = local.modifiedAt ?: return true
-        val remoteTime = runCatching { Instant.parse(remote.updatedAt) }.getOrNull() ?: return true
-        return localTime.isAfter(remoteTime)
     }
 }

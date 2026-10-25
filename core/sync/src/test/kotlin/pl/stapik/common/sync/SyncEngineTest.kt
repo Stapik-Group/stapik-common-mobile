@@ -178,28 +178,35 @@ class SyncEngineTest {
     }
 
     @Test
-    fun `a lost race is retried and the newer local version wins`() = runBlocking {
+    fun `a lost race gives the win to the server and keeps the local edit as a conflict copy`() = runBlocking {
         val f = fixture().apply { gateway.document = remote(t0, emptyList()) }
         f.engine.sync()
-        var runs = 0
-        f.gateway.onBeforeWrite = {
-            if (runs++ == 0) f.gateway.document = remote("2026-10-16T09:00:00Z", listOf("server"))
-        }
-        assertEquals(SyncOutcome.LocalWon, f.engine.edit { Notes(listOf("a")) })
-        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
-        assertEquals(ConflictSource.CLOUD, f.store.copies.single().source)
+        f.gateway.onBeforeWrite = { f.gateway.document = remote("2026-10-16T09:00:00Z", listOf("server")) }
+        assertEquals(SyncOutcome.ServerWon, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("server")), f.engine.load())
+        val copy = f.store.copies.single()
+        assertEquals(ConflictSource.LOCAL, copy.source)
+        assertEquals(Notes(listOf("a")), codec.decode(DocumentEnvelope.parse(copy.content)))
+        assertFalse(f.store.document!!.dirty)
     }
 
     @Test
-    fun `when the server keeps changing, the server version wins after three attempts`() = runBlocking {
+    fun `the winner does not depend on the device clock`() = runBlocking {
         val f = fixture().apply { gateway.document = remote(t0, emptyList()) }
         f.engine.sync()
-        var n = 0
-        f.gateway.onBeforeWrite = {
-            f.gateway.document = remote("2026-10-16T09:00:0${n++}Z", listOf("server$n"))
-        }
+        f.clock.now = Instant.parse("2099-01-01T00:00:00Z")
+        f.gateway.onBeforeWrite = { f.gateway.document = remote("2026-10-16T09:00:00Z", listOf("server")) }
         assertEquals(SyncOutcome.ServerWon, f.engine.edit { Notes(listOf("a")) })
-        assertEquals(Notes(listOf("server3")), f.engine.load())
+        assertEquals(Notes(listOf("server")), f.engine.load())
+    }
+
+    @Test
+    fun `when every write is refused as a conflict, the server version wins after three attempts`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
+        f.engine.sync()
+        f.gateway.onBeforeWrite = { throw CloudException(CloudError.Conflict) }
+        assertEquals(SyncOutcome.ServerWon, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("cloud")), f.engine.load())
         assertEquals(1, f.store.copies.count { it.source == ConflictSource.LOCAL })
         assertFalse(f.store.document!!.dirty)
     }
