@@ -14,7 +14,7 @@ permissions:
 jobs:
   release:
     # Pin @v... to the release of stapik-common-mobile that the submodule is on.
-    uses: Stapik-Group/stapik-common-mobile/.github/workflows/release-apk.yml@v0.1.0
+    uses: Stapik-Group/stapik-common-mobile/.github/workflows/release-apk.yml@v0.2.0
     with:
       apk-name: StapikExampleMobile   # change to the app's name
     secrets: inherit
