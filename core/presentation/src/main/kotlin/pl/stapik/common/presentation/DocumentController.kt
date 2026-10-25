@@ -1,6 +1,10 @@
 package pl.stapik.common.presentation
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,16 +35,24 @@ sealed interface DocumentUiState<out T> {
  * The state of one synchronised document for a screen: the value, and the sync indicator.
  * An Android ViewModel only owns one of these and forwards its flows.
  *
+ * @param scope runs the delayed sync of [editDebounced]; without it every edit syncs at once.
+ * @param debounceMillis how long [editDebounced] waits for the next edit before syncing.
+ * @param waiter waits for the given milliseconds; replaced in tests.
  * @param connected whether a cloud is configured now.
  */
 class DocumentController<T>(
     private val engine: SyncEngine<T>,
+    private val scope: CoroutineScope? = null,
+    private val debounceMillis: Long = DEFAULT_DEBOUNCE_MILLIS,
+    private val waiter: suspend (Long) -> Unit = { delay(it) },
     private val connected: suspend () -> Boolean,
 ) {
     private val mutableDocument = MutableStateFlow<DocumentUiState<T>>(DocumentUiState.Loading)
     private val mutableSync = MutableStateFlow(SyncUiMapper.map(engine.status.value, null, false, false))
     private var lastOutcome: SyncOutcome? = null
     private var resolvedNotice: SyncOutcome? = null
+    private var debounce: Job? = null
+    private var debounceWaiting = false
 
     val document: StateFlow<DocumentUiState<T>> = mutableDocument.asStateFlow()
     val sync: StateFlow<SyncUiState> = mutableSync.asStateFlow()
@@ -69,6 +81,42 @@ class DocumentController<T>(
         return outcome
     }
 
+    /**
+     * Saves the edit at once and syncs [debounceMillis] after the last one, so a burst of edits is
+     * one round trip. Returns null while the sync is still waiting, or the outcome when the edit was
+     * refused or no [scope] was given (then it is the same as [edit]).
+     */
+    suspend fun editDebounced(transform: (T) -> T): SyncOutcome? {
+        val scope = scope ?: return edit(transform)
+        val refused = engine.editLocally(transform)
+        if (refused != null) {
+            finish(refused)
+            return refused
+        }
+        cancelWaiting()
+        debounceWaiting = true
+        debounce = scope.launch {
+            waiter(debounceMillis)
+            debounceWaiting = false
+            sync()
+        }
+        reloadDocument()
+        refreshIndicator()
+        return null
+    }
+
+    /** Syncs now if an edit is waiting for [editDebounced]'s delay; call it when the screen goes away. */
+    suspend fun flushPendingSync(): SyncOutcome? {
+        if (!debounceWaiting) return null
+        cancelWaiting()
+        return sync()
+    }
+
+    private fun cancelWaiting() {
+        if (debounceWaiting) debounce?.cancel()
+        debounceWaiting = false
+    }
+
     suspend fun sync(choice: FirstConnectionChoice? = null): SyncOutcome {
         mutableSync.value = SyncUiState(SyncBadge.SYNCING, "sync.syncing")
         val outcome = engine.sync(choice)
@@ -88,16 +136,18 @@ class DocumentController<T>(
         } else {
             lastOutcome = outcome
         }
-        if (outcome !is SyncOutcome.NewerSchema) {
-            mutableDocument.value = try {
-                DocumentUiState.Success(engine.load())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                DocumentUiState.Error(LoadErrorKind.UNKNOWN)
-            }
-        }
+        if (outcome !is SyncOutcome.NewerSchema) reloadDocument()
         refreshIndicator()
+    }
+
+    private suspend fun reloadDocument() {
+        mutableDocument.value = try {
+            DocumentUiState.Success(engine.load())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            DocumentUiState.Error(LoadErrorKind.UNKNOWN)
+        }
     }
 
     private suspend fun refreshIndicator() {
@@ -115,4 +165,8 @@ class DocumentController<T>(
     }
 
     private fun SyncOutcome.isConflictResolution(): Boolean = this == SyncOutcome.ServerWon || this == SyncOutcome.LocalWon
+
+    companion object {
+        const val DEFAULT_DEBOUNCE_MILLIS = 2_000L
+    }
 }

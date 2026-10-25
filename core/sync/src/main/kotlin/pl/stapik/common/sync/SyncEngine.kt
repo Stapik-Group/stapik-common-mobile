@@ -49,19 +49,23 @@ class SyncEngine<T>(
      * The edit is kept whatever the returned outcome is, except [SyncOutcome.NewerSchema]: a
      * document written with a newer schema than the app understands is never edited.
      */
-    suspend fun edit(transform: (T) -> T): SyncOutcome {
-        mutex.withLock {
-            val local = loadLocal()
-            if (schemaGate != null) {
-                val newer = schemaGate.newerVersionOf(local.content)
-                if (newer != null) return SyncOutcome.NewerSchema(newer, schemaGate.supported)
-            }
-            val updated = transform(codec.decode(local.content))
-            val now = clock.instant()
-            val envelope = codec.encode(updated, local.content, now.truncatedTo(ChronoUnit.SECONDS).toString())
-            store.save(local.edited(envelope, now))
+    suspend fun edit(transform: (T) -> T): SyncOutcome = editLocally(transform) ?: sync()
+
+    /**
+     * The local half of [edit]: applies [transform] and saves it, without touching the cloud.
+     * Returns [SyncOutcome.NewerSchema] when the document was refused, null when it was saved.
+     */
+    suspend fun editLocally(transform: (T) -> T): SyncOutcome.NewerSchema? = mutex.withLock {
+        val local = loadLocal()
+        if (schemaGate != null) {
+            val newer = schemaGate.newerVersionOf(local.content)
+            if (newer != null) return@withLock SyncOutcome.NewerSchema(newer, schemaGate.supported)
         }
-        return sync()
+        val updated = transform(codec.decode(local.content))
+        val now = clock.instant()
+        val envelope = codec.encode(updated, local.content, now.truncatedTo(ChronoUnit.SECONDS).toString())
+        store.save(local.edited(envelope, now))
+        null
     }
 
     /**

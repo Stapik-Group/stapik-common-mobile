@@ -3,7 +3,10 @@ package pl.stapik.common.presentation
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -46,6 +49,7 @@ class DocumentControllerTest {
     private class Gateway : CloudGateway {
         var failure: CloudError? = null
         var document: RemoteDocument? = null
+        var writes = 0
         override suspend fun info(): CloudInfo {
             failure?.let { throw CloudException(it) }
             return CloudInfo(CloudScope.READ_WRITE, "cloud-1")
@@ -53,6 +57,7 @@ class DocumentControllerTest {
         override suspend fun read(slot: SlotKey): RemoteDocument? { failure?.let { throw CloudException(it) }; return document }
         override suspend fun write(slot: SlotKey, content: String, baseline: String): RemoteDocument {
             failure?.let { throw CloudException(it) }
+            writes++
             return RemoteDocument(content, "2026-10-18T10:00:01Z").also { document = it }
         }
     }
@@ -122,6 +127,68 @@ class DocumentControllerTest {
         assertEquals(SyncOutcome.NewerSchema(2, 1), f.controller.edit { items("b") })
         assertEquals(SyncBadge.NEWER_SCHEMA, f.controller.sync.value.badge)
         assertTrue(f.controller.document.value is DocumentUiState.Success)
+    }
+
+    private class Debounced(codec: DocumentCodec<JsonObject>, clock: Clock, scope: CoroutineScope, gate: SchemaGate? = null) {
+        val store = Store()
+        val gateway = Gateway()
+        val release = CompletableDeferred<Unit>()
+        val engine = SyncEngine(SlotKey("a.json"), codec, store, { gateway }, clock, gate)
+        val controller = DocumentController(engine, scope, 1_000L, { release.await() }) { true }
+    }
+
+    @Test
+    fun `a debounced edit is shown at once and reaches the cloud when the delay ends`() = runBlocking {
+        val d = Debounced(codec, clock, this)
+        d.controller.load()
+        assertEquals(null, d.controller.editDebounced { items("a") })
+        assertEquals(DocumentUiState.Success(items("a")), d.controller.document.value)
+        assertEquals(0, d.gateway.writes)
+        d.release.complete(Unit)
+        yield()
+        yield()
+        assertEquals(1, d.gateway.writes)
+    }
+
+    @Test
+    fun `a burst of debounced edits is one write`() = runBlocking {
+        val d = Debounced(codec, clock, this)
+        d.controller.load()
+        d.controller.editDebounced { items("a") }
+        d.controller.editDebounced { JsonObject(it + ("second" to JsonPrimitive(2))) }
+        d.controller.editDebounced { JsonObject(it + ("third" to JsonPrimitive(3))) }
+        assertEquals(0, d.gateway.writes)
+        assertEquals(SyncOutcome.Synchronized, d.controller.flushPendingSync())
+        assertEquals(1, d.gateway.writes)
+        val expected = JsonObject(items("a") + mapOf("second" to JsonPrimitive(2), "third" to JsonPrimitive(3)))
+        assertEquals(DocumentUiState.Success(expected), d.controller.document.value)
+    }
+
+    @Test
+    fun `flushing with nothing waiting does nothing`() = runBlocking {
+        val d = Debounced(codec, clock, this)
+        d.controller.load()
+        assertEquals(null, d.controller.flushPendingSync())
+        assertEquals(0, d.gateway.writes)
+    }
+
+    @Test
+    fun `without a scope a debounced edit syncs at once`() = runBlocking {
+        val f = fixture()
+        f.controller.load()
+        assertEquals(SyncOutcome.Synchronized, f.controller.editDebounced { items("a") })
+        assertEquals(1, f.gateway.writes)
+    }
+
+    @Test
+    fun `a refused debounced edit is reported and nothing waits`() = runBlocking {
+        val gate = SchemaGate(1) { env -> (env.payload["schema"] as? JsonPrimitive)?.content?.toIntOrNull() }
+        val d = Debounced(codec, clock, this, gate)
+        d.store.document = LocalDocument(DocumentEnvelope.parse("""{"lastUpdate":"2026-10-01T00:00:00Z","payload":{"schema":2,"items":["a"]}}"""))
+        d.controller.load()
+        assertEquals(SyncOutcome.NewerSchema(2, 1), d.controller.editDebounced { items("b") })
+        assertEquals(null, d.controller.flushPendingSync())
+        assertEquals(0, d.gateway.writes)
     }
 
     private fun cloudWith(vararg v: String) = RemoteDocument(
