@@ -19,7 +19,7 @@ StapikTheme(themeId) {
     val doc by controller.document.collectAsState()      // DocumentController
     val sync by controller.sync.collectAsState()
     Column {
-        SyncStatusBanner(sync, onAction = { action -> /* RETRY -> controller.sync(), RECONNECT -> open settings, ... */ })
+        SyncStatusBanner(sync, onAction = { action -> /* RETRY -> controller.sync(), RECONNECT -> open settings, DISMISS -> controller.dismissResolvedNotice(), ... */ })
         when (val state = doc) {
             DocumentUiState.Loading -> CircularProgressIndicator()
             is DocumentUiState.Error -> LoadErrorMessage(state.kind)
@@ -31,5 +31,6 @@ StapikTheme(themeId) {
 ```
 
 `SyncUiState.messageKey` and the action labels (`action.retry`, ...) are resolved with `Messages.text`.
+A conflict resolved automatically (both sides changed, the cloud won and the local version was saved as a conflict copy) is announced with `SyncBadge.CONFLICT_RESOLVED` and stays on the indicator, also through later edits and syncs, until the app calls `controller.dismissResolvedNotice()` (action `SyncAction.DISMISS`). The notice lasts as long as the controller does. The copy itself is kept by `FileDocumentStore` (`listConflictCopies()`); the library has no screen for it yet.
 When `SyncAction.CHOOSE_SOURCE` is offered, show `FirstConnectionDialog` and call `controller.sync(choice)`.
 Where to keep the chosen theme is the app's decision (a `MobileOnlyStore` fits).

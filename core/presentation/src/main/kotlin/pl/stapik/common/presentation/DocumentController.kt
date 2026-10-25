@@ -40,6 +40,7 @@ class DocumentController<T>(
     private val mutableDocument = MutableStateFlow<DocumentUiState<T>>(DocumentUiState.Loading)
     private val mutableSync = MutableStateFlow(SyncUiMapper.map(engine.status.value, null, false, false))
     private var lastOutcome: SyncOutcome? = null
+    private var resolvedNotice: SyncOutcome? = null
 
     val document: StateFlow<DocumentUiState<T>> = mutableDocument.asStateFlow()
     val sync: StateFlow<SyncUiState> = mutableSync.asStateFlow()
@@ -75,8 +76,18 @@ class DocumentController<T>(
         return outcome
     }
 
+    suspend fun dismissResolvedNotice() {
+        resolvedNotice = null
+        refreshIndicator()
+    }
+
     private suspend fun finish(outcome: SyncOutcome) {
-        lastOutcome = outcome
+        if (outcome.isConflictResolution()) {
+            resolvedNotice = outcome
+            lastOutcome = SyncOutcome.Synchronized
+        } else {
+            lastOutcome = outcome
+        }
         if (outcome !is SyncOutcome.NewerSchema) {
             mutableDocument.value = try {
                 DocumentUiState.Success(engine.load())
@@ -97,6 +108,11 @@ class DocumentController<T>(
         } catch (e: Exception) {
             false // the document is unreadable; the document state already says so
         }
-        mutableSync.value = SyncUiMapper.map(engine.status.value, lastOutcome, pending, connected())
+        val current = SyncUiMapper.map(engine.status.value, lastOutcome, pending, connected())
+        val notice = resolvedNotice
+        mutableSync.value =
+            if (current.isQuiet && notice != null) SyncUiMapper.map(engine.status.value, notice, pending, connected()) else current
     }
+
+    private fun SyncOutcome.isConflictResolution(): Boolean = this == SyncOutcome.ServerWon || this == SyncOutcome.LocalWon
 }

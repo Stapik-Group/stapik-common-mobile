@@ -41,6 +41,7 @@
     <string name="action_enter_passphrase">Passphrase eingeben</string>
     <string name="action_choose_source">Auswählen</string>
     <string name="action_update_app">App aktualisieren</string>
+    <string name="action_dismiss">Verstanden</string>
     <string name="theme_classic">Klassisch</string>
     <string name="theme_classic_pink">Klassisch Pink</string>
     <string name="theme_modern">Modern</string>

@@ -23,6 +23,7 @@ import pl.stapik.common.sync.CloudException
 import pl.stapik.common.sync.CloudGateway
 import pl.stapik.common.sync.ConflictCopy
 import pl.stapik.common.sync.DocumentStore
+import pl.stapik.common.sync.FirstConnectionChoice
 import pl.stapik.common.sync.RemoteDocument
 import pl.stapik.common.sync.SyncEngine
 import pl.stapik.common.sync.SyncOutcome
@@ -121,6 +122,46 @@ class DocumentControllerTest {
         assertEquals(SyncOutcome.NewerSchema(2, 1), f.controller.edit { items("b") })
         assertEquals(SyncBadge.NEWER_SCHEMA, f.controller.sync.value.badge)
         assertTrue(f.controller.document.value is DocumentUiState.Success)
+    }
+
+    private fun cloudWith(vararg v: String) = RemoteDocument(
+        """{"lastUpdate":"2026-10-17T08:00:00Z","payload":{"items":[${v.joinToString(",") { "\"$it\"" }}]}}""",
+        "2026-10-17T08:00:00Z",
+    )
+
+    private suspend fun Fixture.resolveInFavourOfTheCloud() {
+        connected = false
+        controller.load()
+        controller.edit { items("local") }
+        connected = true
+        gateway.document = cloudWith("cloud")
+        assertEquals(SyncOutcome.ServerWon, controller.sync(FirstConnectionChoice.USE_CLOUD))
+    }
+
+    @Test
+    fun `a resolved conflict is announced and keeps being shown until dismissed`() = runBlocking {
+        val f = fixture()
+        f.resolveInFavourOfTheCloud()
+        assertEquals(
+            SyncUiState(SyncBadge.CONFLICT_RESOLVED, "sync.resolved.server", setOf(SyncAction.DISMISS)),
+            f.controller.sync.value,
+        )
+        assertEquals(SyncOutcome.Synchronized, f.controller.edit { items("cloud", "next") })
+        assertEquals(SyncBadge.CONFLICT_RESOLVED, f.controller.sync.value.badge)
+        f.controller.dismissResolvedNotice()
+        assertEquals(SyncBadge.SYNCED, f.controller.sync.value.badge)
+    }
+
+    @Test
+    fun `a problem is shown before the resolved notice, which returns afterwards`() = runBlocking {
+        val f = fixture()
+        f.resolveInFavourOfTheCloud()
+        f.gateway.failure = CloudError.Network("down")
+        f.controller.edit { items("cloud", "next") }
+        assertEquals(SyncBadge.OFFLINE, f.controller.sync.value.badge)
+        f.gateway.failure = null
+        f.controller.sync()
+        assertEquals(SyncBadge.CONFLICT_RESOLVED, f.controller.sync.value.badge)
     }
 
     @Test

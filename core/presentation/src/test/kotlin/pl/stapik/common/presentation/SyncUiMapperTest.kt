@@ -28,10 +28,15 @@ class SyncUiMapperTest {
     }
 
     @Test
-    fun `resolved conflicts are synced with their own message`() {
-        assertEquals("sync.resolved.server", map(SyncOutcome.ServerWon).messageKey)
-        assertEquals("sync.resolved.local", map(SyncOutcome.LocalWon).messageKey)
-        assertEquals(SyncBadge.SYNCED, map(SyncOutcome.LocalWon).badge)
+    fun `resolved conflicts are announced with their own message and can be dismissed`() {
+        assertEquals(
+            SyncUiState(SyncBadge.CONFLICT_RESOLVED, "sync.resolved.server", setOf(SyncAction.DISMISS)),
+            map(SyncOutcome.ServerWon),
+        )
+        assertEquals(
+            SyncUiState(SyncBadge.CONFLICT_RESOLVED, "sync.resolved.local", setOf(SyncAction.DISMISS)),
+            map(SyncOutcome.LocalWon),
+        )
     }
 
     @Test

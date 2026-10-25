@@ -5,10 +5,10 @@ import pl.stapik.common.sync.SyncOutcome
 import pl.stapik.common.sync.SyncStatus
 import pl.stapik.common.sync.UnreadableKind
 
-enum class SyncBadge { LOCAL_ONLY, SYNCED, SYNCING, PENDING, OFFLINE, NEEDS_CHOICE, READ_ONLY, AUTH, UNREADABLE, NEWER_SCHEMA }
+enum class SyncBadge { LOCAL_ONLY, SYNCED, SYNCING, PENDING, OFFLINE, NEEDS_CHOICE, READ_ONLY, CONFLICT_RESOLVED, AUTH, UNREADABLE, NEWER_SCHEMA }
 
 /** What the user can do about the current state; the UI turns each into a button. */
-enum class SyncAction { RETRY, RECONNECT, ENTER_PASSPHRASE, CHOOSE_SOURCE, UPDATE_APP }
+enum class SyncAction { RETRY, RECONNECT, ENTER_PASSPHRASE, CHOOSE_SOURCE, UPDATE_APP, DISMISS }
 
 /**
  * What the sync indicator shows.
@@ -39,8 +39,8 @@ object SyncUiMapper {
             else SyncUiState(SyncBadge.SYNCED, "sync.synced")
             SyncOutcome.LocalOnly -> SyncUiState(SyncBadge.LOCAL_ONLY, "sync.local_only")
             SyncOutcome.Synchronized -> SyncUiState(SyncBadge.SYNCED, "sync.synced")
-            SyncOutcome.ServerWon -> SyncUiState(SyncBadge.SYNCED, "sync.resolved.server")
-            SyncOutcome.LocalWon -> SyncUiState(SyncBadge.SYNCED, "sync.resolved.local")
+            SyncOutcome.ServerWon -> SyncUiState(SyncBadge.CONFLICT_RESOLVED, "sync.resolved.server", setOf(SyncAction.DISMISS))
+            SyncOutcome.LocalWon -> SyncUiState(SyncBadge.CONFLICT_RESOLVED, "sync.resolved.local", setOf(SyncAction.DISMISS))
             SyncOutcome.KeptLocalUnsynced -> SyncUiState(SyncBadge.READ_ONLY, "sync.read_only", setOf(SyncAction.RECONNECT))
             is SyncOutcome.Offline -> offline(last.cause)
             is SyncOutcome.AuthProblem -> SyncUiState(
