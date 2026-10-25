@@ -41,12 +41,17 @@ class HttpCloudGateway(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val gzipThresholdBytes: Int = 32 * 1024,
     private val maxResponseBytes: Long = DEFAULT_MAX_RESPONSE_BYTES,
+    private val infoTtlMillis: Long = DEFAULT_INFO_TTL_MILLIS,
+    private val uptimeMillis: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : CloudGateway {
 
     private class Known(val updatedAt: String, val etag: String?)
 
+    private class CachedInfo(val info: CloudInfo, val takenAt: Long)
+
     private val layers = HashMap<SlotKey, ContentLayers>()
     private val known = HashMap<SlotKey, Known>()
+    private var cachedInfo: CachedInfo? = null
 
     @Synchronized
     private fun layersFor(slot: SlotKey): ContentLayers =
@@ -60,13 +65,28 @@ class HttpCloudGateway(
     @Synchronized
     private fun knownFor(slot: SlotKey): Known? = known[slot]
 
+    @Synchronized
+    private fun freshInfo(): CloudInfo? =
+        cachedInfo?.takeIf { uptimeMillis() - it.takenAt < infoTtlMillis }?.info
+
+    @Synchronized
+    private fun rememberInfo(info: CloudInfo) {
+        cachedInfo = CachedInfo(info, uptimeMillis())
+    }
+
+    @Synchronized
+    private fun forgetInfo() {
+        cachedInfo = null
+    }
+
     override suspend fun info(): CloudInfo {
+        freshInfo()?.let { return it }
         val response = send(newRequest("GET", config.baseUrl + "me"))
         expectOk(response)
         val root = parseObject(response.body)
         val scope = CloudScope.fromWire(JsonProbe.string(root, "scope"))
         val extensionId = JsonProbe.string(root, "extensionId").orEmpty()
-        return CloudInfo(scope, "${config.normalizedApiUrl}|$extensionId")
+        return CloudInfo(scope, "${config.normalizedApiUrl}|$extensionId").also(::rememberInfo)
     }
 
     override suspend fun read(slot: SlotKey): RemoteDocument? {
@@ -151,6 +171,7 @@ class HttpCloudGateway(
 
     private fun expectOk(response: HttpResponse) {
         if (response.status in 200..299) return
+        if (response.status == 401 || response.status == 403) forgetInfo()
         throw CloudException(
             when (response.status) {
                 401 -> CloudError.Unauthorized
@@ -207,6 +228,7 @@ class HttpCloudGateway(
     companion object {
         const val MAX_AUTO_WAIT_SECONDS = 30L
         const val DEFAULT_MAX_RESPONSE_BYTES = 16L * 1024 * 1024
+        const val DEFAULT_INFO_TTL_MILLIS = 5L * 60 * 1000
         private const val TOO_LARGE_REASON = "The document is too large to process on this device"
     }
 }

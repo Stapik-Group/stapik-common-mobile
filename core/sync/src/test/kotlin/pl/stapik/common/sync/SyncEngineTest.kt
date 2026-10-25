@@ -54,6 +54,18 @@ class SyncEngineTest {
     }
 
     @Test
+    fun `a local edit does not touch the cloud`() = runBlocking {
+        val f = fixture()
+        assertEquals(null, f.engine.editLocally { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("a")), f.engine.load())
+        assertTrue(f.engine.hasPendingChanges())
+        assertEquals(null, f.gateway.document)
+        assertEquals(SyncStatus.IDLE, f.engine.status.value)
+        assertEquals(SyncOutcome.Synchronized, f.engine.sync())
+        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
+    }
+
+    @Test
     fun `first connection with no local data takes the cloud`() = runBlocking {
         val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
         assertEquals(SyncOutcome.Synchronized, f.engine.sync())
