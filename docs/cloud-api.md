@@ -7,7 +7,7 @@ Oznaczenia: **[kod]** – zaimplementowane i objęte testami, **[założenie]** 
 ## Adresy i nagłówki
 
 - Baza: adres z konfiguracji bez białych znaków na brzegach i bez końcowych `/`, potem `/api/v1/`. **[kod]** (`CloudConfig.baseUrl`)
-- `GET {baza}me` – kim jest klucz. Odpowiedź ma pola `scope` i `extensionId`. **[kod]**
+- `GET {baza}me` – kim jest klucz. Odpowiedź ma pola `scope` i `extensionId`. Bramka zapamiętuje ją na 5 minut (zegar monotoniczny, nie czas urządzenia) i zapomina po `401` lub `403` z dowolnego żądania, więc synchronizacja nie pyta o to przed każdą zmianą. **[kod]**
 - `GET {baza}documents/{slot}` – dokument, `404` gdy slotu nie ma. **[kod]**
 - `PUT {baza}documents/{slot}` – zapis. **[kod]**
 - Każde żądanie niesie `x-api-key`. Klucz i fraza nie trafiają do logów ani do eksportu, także przez `toString()` `CloudConfig` i `ConnectFormState`. **[kod]**

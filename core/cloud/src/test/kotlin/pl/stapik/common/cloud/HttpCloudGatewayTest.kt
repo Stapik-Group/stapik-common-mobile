@@ -23,6 +23,7 @@ class HttpCloudGatewayTest {
     private val server = FakeServer()
     private val sleeps = mutableListOf<Long>()
     private val expiries = mutableListOf<Instant>()
+    private var uptime = 0L
 
     private fun gateway(passphrase: String? = null, url: String = " https://cloud.example/ ") = HttpCloudGateway(
         CloudConfig(url, "key-1", passphrase),
@@ -30,7 +31,10 @@ class HttpCloudGatewayTest {
         onApiKeyExpiry = { expiries += it },
         sleeper = { sleeps += it },
         dispatcher = Dispatchers.Unconfined,
+        uptimeMillis = { uptime },
     )
+
+    private fun infoRequests() = server.requests.count { it.url.endsWith("/me") }
 
     private fun gatewayOn(dispatcher: CoroutineDispatcher, passphrase: String? = null) = HttpCloudGateway(
         CloudConfig("https://cloud.example", "key-1", passphrase),
@@ -64,6 +68,46 @@ class HttpCloudGatewayTest {
         assertEquals("https://cloud.example|ext-1", info.identity)
         server.scope = "READ_ONLY"
         assertEquals(CloudScope.READ_ONLY, gateway().info().scope)
+    }
+
+    @Test
+    fun `info is asked once within the time to live`() = runBlocking {
+        val g = gateway()
+        val first = g.info()
+        uptime = HttpCloudGateway.DEFAULT_INFO_TTL_MILLIS - 1
+        assertEquals(first, g.info())
+        assertEquals(1, infoRequests())
+    }
+
+    @Test
+    fun `info is asked again after the time to live`() = runBlocking {
+        val g = gateway()
+        g.info()
+        uptime = HttpCloudGateway.DEFAULT_INFO_TTL_MILLIS
+        g.info()
+        assertEquals(2, infoRequests())
+    }
+
+    @Test
+    fun `a rejected key makes the next info ask again`() = runBlocking {
+        val g = gateway()
+        g.info()
+        server.forcedStatus = 403
+        assertEquals(CloudError.Forbidden, errorOf { g.read(slot) })
+        server.forcedStatus = null
+        g.info()
+        assertEquals(2, infoRequests())
+    }
+
+    @Test
+    fun `a failed info is not remembered`() = runBlocking {
+        val g = gateway()
+        server.forcedStatus = 503
+        assertEquals(CloudError.ServerError(503), errorOf { g.info() })
+        server.forcedStatus = null
+        g.info()
+        g.info()
+        assertEquals(2, infoRequests())
     }
 
     @Test
