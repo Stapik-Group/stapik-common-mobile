@@ -38,6 +38,9 @@ data class ConnectFormState(
         get() = !busy && config.isConfigured && (urlStatus == ApiUrlStatus.SECURE || urlStatus == ApiUrlStatus.INSECURE)
 
     fun toConfig(): CloudConfig = config
+
+    override fun toString(): String =
+        "ConnectFormState(apiUrl=$apiUrl, apiKey=***, passphrase=***, keyVisible=$keyVisible, busy=$busy, errorKey=$errorKey)"
 }
 
 sealed interface ConnectOutcome {

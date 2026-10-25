@@ -10,7 +10,7 @@ Oznaczenia: **[kod]** – zaimplementowane i objęte testami, **[założenie]** 
 - `GET {baza}me` – kim jest klucz. Odpowiedź ma pola `scope` i `extensionId`. **[kod]**
 - `GET {baza}documents/{slot}` – dokument, `404` gdy slotu nie ma. **[kod]**
 - `PUT {baza}documents/{slot}` – zapis. **[kod]**
-- Każde żądanie niesie `x-api-key`. Klucz nie trafia do logów ani do eksportu. **[kod]**
+- Każde żądanie niesie `x-api-key`. Klucz i fraza nie trafiają do logów ani do eksportu, także przez `toString()` `CloudConfig` i `ConnectFormState`. **[kod]**
 - `http://` jest dozwolone, ale UI ostrzega, że klucz idzie nieszyfrowany. **[kod]** (`ApiUrlStatus`)
 - Treść odpowiedzi jest czytana do limitu 16 MiB (`HttpCloudGateway.DEFAULT_MAX_RESPONSE_BYTES`, też po zdjęciu kompresji HTTP). Dłuższa odpowiedź przerywa odczyt i kończy się `Unreadable`. Desktop ma ten sam mechanizm (`maxResponseBytes` żądania), ale dla dokumentów go nie ustawia. **[kod]**
 - Przekierowania HTTP nie są wykonywane, także w kliencie przekazanym do `OkHttpTransport`: OkHttp przy zmianie hosta zdejmuje tylko `Authorization`, więc `x-api-key` poleciałby do hosta wskazanego w `Location`. **[kod]**
