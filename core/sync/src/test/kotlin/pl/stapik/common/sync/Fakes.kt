@@ -73,4 +73,8 @@ class InMemoryDocumentStore : DocumentStore {
     override suspend fun saveConflictCopy(copy: ConflictCopy) {
         copies += copy
     }
+
+    override suspend fun discard() {
+        document = null
+    }
 }

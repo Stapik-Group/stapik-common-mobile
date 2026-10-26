@@ -70,6 +70,16 @@ class SyncEngineTest {
     }
 
     @Test
+    fun `after the local document is discarded the next sync takes the cloud`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
+        f.engine.editLocally { Notes(listOf("local only")) }
+        f.engine.discardLocalDocument()
+        assertEquals(SyncOutcome.Synchronized, f.engine.sync())
+        assertEquals(Notes(listOf("cloud")), f.engine.load())
+        assertTrue(f.store.copies.isEmpty())
+    }
+
+    @Test
     fun `first connection with no local data takes the cloud`() = runBlocking {
         val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
         assertEquals(SyncOutcome.Synchronized, f.engine.sync())

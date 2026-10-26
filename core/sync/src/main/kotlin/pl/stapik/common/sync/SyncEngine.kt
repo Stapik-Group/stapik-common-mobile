@@ -96,6 +96,9 @@ class SyncEngine<T>(
         }
     }
 
+    /** Deletes the local document. For data that cannot be read; changes not yet sent to the cloud are lost. */
+    suspend fun discardLocalDocument() = mutex.withLock { store.discard() }
+
     /** Whether there are local changes not yet sent to the cloud. */
     suspend fun hasPendingChanges(): Boolean = mutex.withLock { loadLocal().dirty }
 

@@ -62,7 +62,12 @@
     <string name="action_back">Back</string>
     <string name="load_loading">Loading…</string>
     <string name="load_error_corrupted">The data on this device is damaged and cannot be read.</string>
+    <string name="load_error_undecryptable">The data on this device can no longer be unlocked. This happens when the app\'s data is restored on another device or the device\'s secure storage is reset. If you use the cloud, the document is still there.</string>
     <string name="load_error_model_mismatch">The data was saved by a different version of the app and cannot be read.</string>
+    <string name="load_error_discard_action">Download again from the cloud</string>
+    <string name="load_error_discard_title">Discard the data on this device?</string>
+    <string name="load_error_discard_message">The unreadable data on this device will be deleted and the document will be downloaded from the cloud again. This needs a connection to the cloud, and changes that were never sent to the cloud will be lost.</string>
+    <string name="load_error_discard_confirm">Discard and download</string>
     <string name="load_error_unknown">The data could not be loaded.</string>
     <string name="choice_title">Data on this device and in the cloud</string>
     <string name="choice_message">Both this device and the cloud have data. Which version do you want to keep?</string>
