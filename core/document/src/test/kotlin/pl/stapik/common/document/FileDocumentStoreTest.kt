@@ -270,4 +270,57 @@ class FileDocumentStoreTest {
         assertTrue(store().listConflictCopies().isEmpty())
         assertNotNull(other.listConflictCopies().singleOrNull())
     }
+
+    private fun partitionStore(key: String) = FileDocumentStore(dir, slot.inPartition(key))
+
+    @Test
+    fun `partitions of a slot keep separate documents`() = runBlocking {
+        partitionStore("2025").save(doc("old"))
+        partitionStore("2026").save(doc("new"))
+        store().save(doc("whole"))
+
+        assertTrue(text(partitionStore("2025").load()).contains("old"))
+        assertTrue(text(partitionStore("2026").load()).contains("new"))
+        assertTrue(text(store().load()).contains("whole"))
+    }
+
+    @Test
+    fun `discarding a partition leaves the other partitions and the slot`() = runBlocking {
+        partitionStore("2025").save(doc("old"))
+        partitionStore("2026").save(doc("new"))
+        store().save(doc("whole"))
+
+        partitionStore("2026").discard()
+
+        assertNull(partitionStore("2026").load())
+        assertNotNull(partitionStore("2025").load())
+        assertNotNull(store().load())
+    }
+
+    @Test
+    fun `conflict copies are listed per partition`() = runBlocking {
+        val key = slot.inPartition("2026")
+        val inYear = ConflictCopy(key, ConflictSource.CLOUD, Instant.ofEpochMilli(5), "{}")
+        partitionStore("2026").saveConflictCopy(inYear)
+        partitionStore("2025").saveConflictCopy(ConflictCopy(slot.inPartition("2025"), ConflictSource.LOCAL, Instant.ofEpochMilli(6), "{}"))
+        store().saveConflictCopy(ConflictCopy(slot, ConflictSource.LOCAL, Instant.ofEpochMilli(7), "{}"))
+
+        assertEquals(listOf(inYear), partitionStore("2026").listConflictCopies())
+        assertEquals(1, partitionStore("2025").listConflictCopies().size)
+        assertEquals(1, store().listConflictCopies().size)
+    }
+
+    @Test
+    fun `pruning one partition leaves the copies of the others`() = runBlocking {
+        val clock = Clock.fixed(Instant.ofEpochMilli(100), ZoneOffset.UTC)
+        val year = FileDocumentStore(dir, slot.inPartition("2026"), PayloadCipher.None, 3, clock, 1)
+        val other = partitionStore("2025")
+        other.saveConflictCopy(ConflictCopy(slot.inPartition("2025"), ConflictSource.CLOUD, Instant.ofEpochMilli(1), "{}"))
+
+        year.saveConflictCopy(ConflictCopy(slot.inPartition("2026"), ConflictSource.CLOUD, Instant.ofEpochMilli(2), "{}"))
+        year.saveConflictCopy(ConflictCopy(slot.inPartition("2026"), ConflictSource.CLOUD, Instant.ofEpochMilli(3), "{}"))
+
+        assertEquals(1, year.listConflictCopies().size)
+        assertEquals(1, other.listConflictCopies().size)
+    }
 }

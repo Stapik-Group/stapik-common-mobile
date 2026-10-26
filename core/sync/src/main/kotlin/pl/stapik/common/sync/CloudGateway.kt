@@ -46,6 +46,9 @@ class CloudException(val error: CloudError, cause: Throwable? = null) : Exceptio
 /** A document as stored in the cloud: its text and the server's version stamp. */
 data class RemoteDocument(val content: String, val updatedAt: String)
 
+/** A partition of a slot as the cloud lists it. */
+data class PartitionInfo(val partition: String, val updatedAt: String)
+
 /**
  * The engine's view of Stapik Cloud. The real implementation (HTTP, gzip, E2E) comes later in
  * `core:cloud`; the engine only depends on this interface. Every method throws [CloudException].
@@ -62,4 +65,7 @@ interface CloudGateway {
      * if the server's version differs, this throws [CloudError.Conflict].
      */
     suspend fun write(slot: SlotKey, content: String, baseline: String): RemoteDocument
+
+    suspend fun partitions(slot: SlotKey): List<PartitionInfo> =
+        throw UnsupportedOperationException("This gateway does not know partitions")
 }
