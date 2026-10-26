@@ -17,7 +17,7 @@ class DocumentDecodeException(message: String, cause: Throwable? = null) : Excep
  * previous envelope, so a field added to the payload by a newer desktop survives. Unknown fields
  * *nested inside* known structures (for example an extra key on a list item) are not preserved:
  * the typed model cannot carry them. Callers that must not lose such data have to refuse to
- * write a document with a newer schema than they understand (a later step).
+ * write a document with a newer schema than they understand ([SchemaGate]).
  *
  * @param serializer serializer of the payload model; it must serialise to a JSON object.
  * @param isEmptyContent whether the model holds no user data (used by the first-connection rule).

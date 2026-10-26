@@ -23,6 +23,18 @@ Koperta (`content`): obiekt z `lastUpdate` i `payload`; nieznane pola najwyższe
 
 Zapis: ciało `{"content": "<tekst>"}`; gdy klient zna wersję, dodatkowo `"clientLastKnownUpdate": "<updatedAt>"` (dla starszych serwerów). **[kod]**
 
+### Nieznane pola przy zapisie
+
+Kodek (`DocumentCodec`) czyta dokument do typowanego modelu aplikacji, więc to, co model nie opisuje, przy zapisie przeżywa tylko częściowo:
+
+| Gdzie jest nieznane pole | Po zapisie z tej wersji biblioteki |
+|---|---|
+| najwyższy poziom koperty (obok `lastUpdate` i `payload`) | zostaje |
+| najwyższy poziom `payload`, wraz ze wszystkim, co w nim zagnieżdżone | zostaje w całości |
+| wewnątrz znanej struktury, np. dodatkowy klucz w elemencie listy | **znika** |
+
+Przed utratą nie chroni kodek, tylko `SchemaGate`: dokument zapisany w nowszym schemacie niż ten, który zna aplikacja, jest pokazywany, ale nie edytowany (`SyncOutcome.NewerSchema`). Ochrona działa więc tylko wtedy, gdy desktop podnosi numer schematu przy każdej zmianie struktury znanych obiektów. Dodanie pola do znanego obiektu bez podniesienia numeru schematu skończy się jego utratą przy pierwszej edycji na telefonie. **[kod; zachowanie desktopu: założenie]**
+
 ## Konflikty
 
 Serwer ≥ 1.2.0 porównuje nagłówek `If-Match` z ETagiem dokumentu (cudzysłowiony SHA-256 treści) i odpowiada `409` przy braku lub nieaktualnym. **[kod po stronie klienta; zachowanie serwera: założenie z dokumentacji desktopu]**

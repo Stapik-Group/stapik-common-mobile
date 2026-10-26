@@ -48,6 +48,27 @@ class DocumentCodecTest {
     }
 
     @Test
+    fun `encode drops unknown fields nested in a known structure`() {
+        val previous = DocumentEnvelope.parse(
+            """{"lastUpdate":"t1","payload":{"items":[{"id":1,"title":"a","addedByNewerDesktop":true}],"currency_code":"EUR"}}""",
+        )
+        val result = codec.encode(codec.decode(previous), previous, "t2")
+        assertEquals(
+            """{"lastUpdate":"t2","payload":{"items":[{"id":1,"title":"a"}],"currency_code":"EUR"}}""",
+            result.toJson(),
+        )
+    }
+
+    @Test
+    fun `encode keeps an unknown top-level key whole, including what is nested in it`() {
+        val previous = DocumentEnvelope.parse(
+            """{"lastUpdate":"t1","payload":{"items":[],"newInDesktop":{"list":[{"deep":{"x":1}}]}}}""",
+        )
+        val result = codec.encode(Sample(), previous, "t2")
+        assertTrue(result.toJson().contains(""""newInDesktop":{"list":[{"deep":{"x":1}}]}"""))
+    }
+
+    @Test
     fun `encode then decode returns the same model`() {
         val model = Sample(listOf(Item(3, "c")), "USD")
         val envelope = codec.encode(model, DocumentEnvelope.empty("t0"), "t1")
