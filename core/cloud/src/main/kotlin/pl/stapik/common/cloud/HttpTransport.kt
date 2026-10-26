@@ -9,7 +9,16 @@ class HttpRequest(
     val headers: Map<String, String> = emptyMap(),
     val body: String? = null,
     val maxResponseBytes: Long? = null,
-)
+) {
+    override fun toString(): String {
+        val shown = headers.mapValues { (name, value) -> if (name.lowercase() in SENSITIVE_HEADERS) Redactor.MASK else value }
+        return "HttpRequest($method $url, headers=$shown, body=${body?.length ?: 0} chars)"
+    }
+
+    private companion object {
+        val SENSITIVE_HEADERS = setOf("x-api-key", "authorization")
+    }
+}
 
 class ResponseTooLargeException(val limitBytes: Long) :
     IOException("The response is larger than the limit of $limitBytes bytes")

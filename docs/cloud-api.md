@@ -96,6 +96,18 @@ Zapis: najpierw kompresja, potem (przy ustawionej frazie) szyfrowanie. Odczyt: o
 
 Błędy odczytu (`CloudError.Unreadable`) mają rodzaj: brak frazy, zła fraza lub zmodyfikowane dane, nowsza wersja formatu, inny. Przy każdym z nich niczego się nie zapisuje.
 
+## Logi i raporty błędów
+
+Klucz i fraza nie trafiają do komunikatów błędów biblioteki (`CloudError`, `CloudException`), do `toString()` konfiguracji, formularza i żądania HTTP. Aplikacja, która loguje własne wyjątki albo wysyła raporty o błędach, przepuszcza tekst przez `Redactor`:
+
+```kotlin
+val redactor = Redactor.of(config)
+log.e(redactor.describe(error))
+report.attach(redactor.stackTrace(error))
+```
+
+`Redactor` zastępuje `***` znane sekrety (klucz, frazę) w każdym miejscu tekstu, a poza tym wartości pól `x-api-key`, `authorization`, `apiKey`, `passphrase`, `password` oraz dane logowania w adresie (`https://użytkownik:hasło@host`). `describe` przechodzi po łańcuchu przyczyn, `stackTrace` maskuje cały ślad stosu. Treść dokumentu użytkownika nie jest rozpoznawana: nie wkładaj jej do logów. **[kod]**
+
 ## Kopie eksportu
 
 Plik eksportu chroniony frazą to blob `stapik-e2e` z AAD `stapik-e2e/1/backup/archive`, którego tekstem jawnym jest Base64 archiwum ZIP. To format tylko mobilny; desktop go nie czyta.
