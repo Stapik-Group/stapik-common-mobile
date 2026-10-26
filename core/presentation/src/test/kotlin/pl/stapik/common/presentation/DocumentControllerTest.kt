@@ -120,6 +120,13 @@ class DocumentControllerTest {
     }
 
     @Test
+    fun `data that cannot be decrypted is told apart from damaged data`() = runBlocking {
+        val f = fixture().apply { store.failLoad = DocumentCorruptedException(emptyList(), undecryptable = true) }
+        f.controller.load()
+        assertEquals(DocumentUiState.Error(LoadErrorKind.UNDECRYPTABLE), f.controller.document.value)
+    }
+
+    @Test
     fun `a refused edit keeps the shown document and reports the newer schema`() = runBlocking {
         val gate = SchemaGate(1) { env -> (env.payload["schema"] as? JsonPrimitive)?.content?.toIntOrNull() }
         val f = fixture(gate)

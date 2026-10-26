@@ -136,6 +136,28 @@ class FileDocumentStoreTest {
         Unit
     }
 
+    private object LostKeyCipher : PayloadCipher {
+        override fun encrypt(plain: ByteArray) = plain
+
+        override fun decrypt(encrypted: ByteArray): ByteArray = throw javax.crypto.AEADBadTagException("key is gone")
+    }
+
+    @Test
+    fun `data that fails only in the cipher is reported as undecryptable`() = runBlocking {
+        store().save(doc("a"))
+        store().save(doc("b"))
+        val error = assertThrows(DocumentCorruptedException::class.java) { runBlocking { store(LostKeyCipher).load() } }
+        assertTrue(error.undecryptable)
+    }
+
+    @Test
+    fun `damaged content is not reported as undecryptable`() = runBlocking {
+        store().save(doc("a"))
+        corrupt(file("notes.json.doc"))
+        val error = assertThrows(DocumentCorruptedException::class.java) { runBlocking { store().load() } }
+        assertFalse(error.undecryptable)
+    }
+
     @Test
     fun `an unsupported format version counts as unreadable`() = runBlocking {
         Files.write(file("notes.json.doc"), """{"version":99,"content":"{}"}""".toByteArray())

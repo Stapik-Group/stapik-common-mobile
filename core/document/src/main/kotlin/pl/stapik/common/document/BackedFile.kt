@@ -4,9 +4,15 @@ import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.security.GeneralSecurityException
 
-/** The file and every backup are unreadable; nothing is returned and nothing is overwritten. */
-class DocumentCorruptedException(val files: List<Path>, cause: Throwable? = null) :
+/**
+ * The file and every backup are unreadable; nothing is returned and nothing is overwritten.
+ *
+ * @property undecryptable every attempt failed in the cipher (the key is gone or different, for
+ *   example after a restore on another device), not because the content was damaged.
+ */
+class DocumentCorruptedException(val files: List<Path>, cause: Throwable? = null, val undecryptable: Boolean = false) :
     Exception("Stored data is unreadable: ${files.joinToString { it.fileName.toString() }}", cause)
 
 /** The stored data was written by a newer version of the app than this one; it must be neither replaced nor read from a backup. */
@@ -55,6 +61,7 @@ class BackedFile(
         val candidates = (listOf(current) + (1..backupCount).map { backup(it) }).filter { Files.exists(it) }
         if (candidates.isEmpty()) return null
         var lastError: Throwable? = null
+        var onlyCipherFailures = true
         for (path in candidates) {
             try {
                 return Loaded(parse(cipher.decrypt(Files.readAllBytes(path))), fromBackup = path != current)
@@ -62,9 +69,10 @@ class BackedFile(
                 throw e
             } catch (e: Exception) {
                 lastError = e
+                if (e !is GeneralSecurityException) onlyCipherFailures = false
             }
         }
-        throw DocumentCorruptedException(candidates, lastError)
+        throw DocumentCorruptedException(candidates, lastError, onlyCipherFailures)
     }
 
     fun <R> write(plain: ByteArray, parse: (ByteArray) -> R) {

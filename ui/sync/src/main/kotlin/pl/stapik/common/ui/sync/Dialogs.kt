@@ -56,6 +56,7 @@ fun FirstConnectionDialog(
 fun LoadErrorMessage(kind: LoadErrorKind, modifier: Modifier = Modifier) {
     val text = when (kind) {
         LoadErrorKind.CORRUPTED -> stringResource(R.string.load_error_corrupted)
+        LoadErrorKind.UNDECRYPTABLE -> stringResource(R.string.load_error_undecryptable)
         LoadErrorKind.MODEL_MISMATCH -> stringResource(R.string.load_error_model_mismatch)
         LoadErrorKind.UNKNOWN -> stringResource(R.string.load_error_unknown)
     }

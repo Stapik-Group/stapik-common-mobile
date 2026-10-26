@@ -62,6 +62,7 @@
     <string name="action_back">Zurück</string>
     <string name="load_loading">Wird geladen…</string>
     <string name="load_error_corrupted">Die Daten auf diesem Gerät sind beschädigt und können nicht gelesen werden.</string>
+    <string name="load_error_undecryptable">Die Daten auf diesem Gerät lassen sich nicht mehr entsperren. Das passiert, wenn die App-Daten auf einem anderen Gerät wiederhergestellt werden oder der sichere Schlüsselspeicher zurückgesetzt wird. Wenn Sie die Cloud nutzen, ist das Dokument dort weiterhin vorhanden.</string>
     <string name="load_error_model_mismatch">Die Daten wurden von einer anderen Version der App gespeichert und können nicht gelesen werden.</string>
     <string name="load_error_unknown">Die Daten konnten nicht geladen werden.</string>
     <string name="choice_title">Daten auf diesem Gerät und in der Cloud</string>

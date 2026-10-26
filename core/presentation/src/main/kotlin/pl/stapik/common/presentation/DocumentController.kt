@@ -20,6 +20,9 @@ enum class LoadErrorKind {
     /** The stored file and its backups cannot be read; offer restoring a safety copy or an import. */
     CORRUPTED,
 
+    /** The data is intact but cannot be decrypted: the device key is gone (restore on another device, reset of the key store). */
+    UNDECRYPTABLE,
+
     /** The data does not fit the app's model (for example written by a newer version). */
     MODEL_MISMATCH,
 
@@ -69,7 +72,7 @@ class DocumentController<T>(
         } catch (e: CancellationException) {
             throw e
         } catch (e: DocumentCorruptedException) {
-            DocumentUiState.Error(LoadErrorKind.CORRUPTED)
+            DocumentUiState.Error(if (e.undecryptable) LoadErrorKind.UNDECRYPTABLE else LoadErrorKind.CORRUPTED)
         } catch (e: DocumentDecodeException) {
             DocumentUiState.Error(LoadErrorKind.MODEL_MISMATCH)
         } catch (e: Exception) {

@@ -62,6 +62,7 @@
     <string name="action_back">Wstecz</string>
     <string name="load_loading">Ładowanie…</string>
     <string name="load_error_corrupted">Dane na tym urządzeniu są uszkodzone i nie można ich odczytać.</string>
+    <string name="load_error_undecryptable">Dane na tym urządzeniu nie dają się już odblokować. Tak bywa po odtworzeniu danych aplikacji na innym urządzeniu albo po zresetowaniu bezpiecznego magazynu kluczy. Jeśli używasz chmury, dokument nadal w niej jest.</string>
     <string name="load_error_model_mismatch">Dane zostały zapisane przez inną wersję aplikacji i nie można ich odczytać.</string>
     <string name="load_error_unknown">Nie udało się wczytać danych.</string>
     <string name="choice_title">Dane na tym urządzeniu i w chmurze</string>
