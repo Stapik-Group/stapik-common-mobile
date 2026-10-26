@@ -38,6 +38,15 @@ class MobileOnlyStoreExportTest {
     }
 
     @Test
+    fun `import text from a newer version is reported with both versions`() = runBlocking {
+        val s = store("a").apply { save(Prefs(5)) }
+        val error = assertThrows(NewerStoredVersionException::class.java) { runBlocking { s.importJson("""{"version":9,"data":{"n":1}}""") } }
+        assertEquals(9, error.found)
+        assertEquals(1, error.supported)
+        assertEquals(Prefs(5), s.load())
+    }
+
+    @Test
     fun `invalid import text changes nothing`() = runBlocking {
         val s = store("a").apply { save(Prefs(5)) }
         assertThrows(IllegalArgumentException::class.java) { runBlocking { s.importJson("not json") } }

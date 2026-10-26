@@ -17,7 +17,7 @@ class DocumentCorruptedException(val files: List<Path>, cause: Throwable? = null
 
 /** The stored data was written by a newer version of the app than this one; it must be neither replaced nor read from a backup. */
 class NewerStoredVersionException(val found: Int, val supported: Int) :
-    Exception("Stored data has format version $found, this app understands up to $supported")
+    IllegalArgumentException("Stored data has format version $found, this app understands up to $supported")
 
 /**
  * One logical file with atomic writes, rotating backups and recovery; shared by every store that
