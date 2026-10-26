@@ -7,11 +7,13 @@ Oznaczenia: **[kod]** – zaimplementowane i objęte testami, **[założenie]** 
 ## Adresy i nagłówki
 
 - Baza: adres z konfiguracji bez białych znaków na brzegach i bez końcowych `/`, potem `/api/v1/`. **[kod]** (`CloudConfig.baseUrl`)
-- `GET {baza}me` – kim jest klucz. Odpowiedź ma pola `scope` i `extensionId`. **[kod]**
+- `GET {baza}me` – kim jest klucz. Odpowiedź ma pola `scope` i `extensionId`. Bramka zapamiętuje ją na 5 minut (zegar monotoniczny, nie czas urządzenia) i zapomina po `401` lub `403` z dowolnego żądania, więc synchronizacja nie pyta o to przed każdą zmianą. **[kod]**
 - `GET {baza}documents/{slot}` – dokument, `404` gdy slotu nie ma. **[kod]**
 - `PUT {baza}documents/{slot}` – zapis. **[kod]**
-- Każde żądanie niesie `x-api-key`. Klucz nie trafia do logów ani do eksportu. **[kod]**
+- Każde żądanie niesie `x-api-key`. Klucz i fraza nie trafiają do logów ani do eksportu, także przez `toString()` `CloudConfig` i `ConnectFormState`. **[kod]**
 - `http://` jest dozwolone, ale UI ostrzega, że klucz idzie nieszyfrowany. **[kod]** (`ApiUrlStatus`)
+- Treść odpowiedzi jest czytana do limitu 16 MiB (`HttpCloudGateway.DEFAULT_MAX_RESPONSE_BYTES`, też po zdjęciu kompresji HTTP). Dłuższa odpowiedź przerywa odczyt i kończy się `Unreadable`. Desktop ma ten sam mechanizm (`maxResponseBytes` żądania), ale dla dokumentów go nie ustawia. **[kod]**
+- Przekierowania HTTP nie są wykonywane, także w kliencie przekazanym do `OkHttpTransport`: OkHttp przy zmianie hosta zdejmuje tylko `Authorization`, więc `x-api-key` poleciałby do hosta wskazanego w `Location`. **[kod]**
 
 ## Dokument
 
@@ -21,9 +23,23 @@ Koperta (`content`): obiekt z `lastUpdate` i `payload`; nieznane pola najwyższe
 
 Zapis: ciało `{"content": "<tekst>"}`; gdy klient zna wersję, dodatkowo `"clientLastKnownUpdate": "<updatedAt>"` (dla starszych serwerów). **[kod]**
 
+### Nieznane pola przy zapisie
+
+Kodek (`DocumentCodec`) czyta dokument do typowanego modelu aplikacji, więc to, co model nie opisuje, przy zapisie przeżywa tylko częściowo:
+
+| Gdzie jest nieznane pole | Po zapisie z tej wersji biblioteki |
+|---|---|
+| najwyższy poziom koperty (obok `lastUpdate` i `payload`) | zostaje |
+| najwyższy poziom `payload`, wraz ze wszystkim, co w nim zagnieżdżone | zostaje w całości |
+| wewnątrz znanej struktury, np. dodatkowy klucz w elemencie listy | **znika** |
+
+Przed utratą nie chroni kodek, tylko `SchemaGate`: dokument zapisany w nowszym schemacie niż ten, który zna aplikacja, jest pokazywany, ale nie edytowany (`SyncOutcome.NewerSchema`). Ochrona działa więc tylko wtedy, gdy desktop podnosi numer schematu przy każdej zmianie struktury znanych obiektów. Dodanie pola do znanego obiektu bez podniesienia numeru schematu skończy się jego utratą przy pierwszej edycji na telefonie. **[kod; zachowanie desktopu: założenie]**
+
 ## Konflikty
 
 Serwer ≥ 1.2.0 porównuje nagłówek `If-Match` z ETagiem dokumentu (cudzysłowiony SHA-256 treści) i odpowiada `409` przy braku lub nieaktualnym. **[kod po stronie klienta; zachowanie serwera: założenie z dokumentacji desktopu]**
+
+`updatedAt` i baza są porównywane jako chwile (`CloudTimestamp.sameInstant`), nie jako tekst: `Z`, `+00:00` i różna liczba cyfr ułamka sekundy to ten sam czas i nie dają fałszywego konfliktu ani dodatkowego GET. Tekst, który nie jest czasem, porównuje się jako tekst. **[kod]**
 
 Klient pamięta ETag z ostatniego odczytu lub zapisu każdego slotu:
 
@@ -31,6 +47,8 @@ Klient pamięta ETag z ostatniego odczytu lub zapisu każdego slotu:
 2. Nie zna → czyta dokument raz. Jeśli `updatedAt` serwera różni się od bazy, to jest konflikt i **żadne PUT nie jest wysyłane**.
 3. `409` na PUT → konflikt (silnik powtarza do 3 razy, potem wygrywa serwer, a lokalna wersja zostaje jako kopia konfliktu).
 4. Brak dokumentu przy niepustej bazie → konflikt.
+
+O tym, kto wygrywa, nie decyduje zegar. Gdy zmieniły się obie strony (serwer względem bazy i lokalny dokument), zostaje wersja z chmury, a lokalna trafia do kopii konfliktu; wynik to `ServerWon`. `modifiedAt` lokalnego dokumentu jest tylko podpowiedzią dla UI. Desktop rozstrzyga inaczej: porównuje `lastUpdate` z kopert obu stron (czas edycji, nie czas serwera), więc po stronie desktopu rozstrzygnięcie nadal zależy od zegarów urządzeń.
 
 Czy serwer przyjmuje jednocześnie `If-Match` i `clientLastKnownUpdate`: **[założenie]**, sprawdzone tylko na atrapie serwera.
 
@@ -42,9 +60,12 @@ Czy serwer przyjmuje jednocześnie `If-Match` i `clientLastKnownUpdate`: **[zał
 | `403` | `Forbidden` – klucz bez uprawnień |
 | `404` | brak dokumentu (tylko odczyt) |
 | `409` | `Conflict` |
-| `429` | `Retry-After` ≤ 30 s: klient czeka i ponawia raz; dłużej: `RateLimited(retryAfter)` |
+| `429` | `Retry-After` (sekundy albo data HTTP) ≤ 30 s: klient czeka i ponawia raz; dłużej: `RateLimited(retryAfter)`, a ponowienie bierze na siebie tło. Data HTTP jest liczona względem zegara urządzenia, ujemna lub nierozpoznana wartość to „nieznane” |
+| `3xx` | `ServerError(kod)` – przekierowanie nie jest wykonywane; adres w ustawieniach ma wskazywać wprost na API |
 | inne ≥ 400 | `ServerError(kod)` |
 | brak odpowiedzi | `Network` |
+
+Żądanie, parsowanie odpowiedzi, kompresja i szyfrowanie (Argon2id) wykonują się na dispatcherze bramki (domyślnie `Dispatchers.IO`), nie na wątku wołającego. `OutOfMemoryError` w takim kroku kończy się `Unreadable`, nie przerwaniem procesu. **[kod]**
 
 Limit serwera: 600 żądań na minutę (nagłówki `X-RateLimit-*`). `X-Api-Key-Expires-At` (ISO-8601) jest przekazywane do `onApiKeyExpiry`, żeby UI mogło ostrzec o wygasaniu klucza. **[kod]**
 
@@ -61,7 +82,7 @@ Zapis: najpierw kompresja, potem (przy ustawionej frazie) szyfrowanie. Odczyt: o
 - od 32 KiB tekstu w UTF-8; mniejsze lecą bez zmian,
 - jeśli base64 nie jest krótszy od tekstu, wysyłany jest tekst,
 - próg musi być taki jak na desktopie, bo starsze desktopy nie czytają skompresowanych dokumentów,
-- odczyt ma limit 256 MiB po rozpakowaniu.
+- odczyt ma limit 32 MiB po rozpakowaniu (desktop: 256 MiB, więc dokument większy niż 32 MiB powstały na desktopie nie otworzy się na telefonie, tylko da `Unreadable`).
 
 ### Szyfrowanie `stapik-e2e` **[kod; zgodność z libsodium sprawdzona na wektorach]**
 
@@ -74,6 +95,18 @@ Zapis: najpierw kompresja, potem (przy ustawionej frazie) szyfrowanie. Odczyt: o
 - implementacja: BouncyCastle (czysta Java), nie natywny libsodium; HChaCha20 jest własny, bo BouncyCastle nie ma XChaCha.
 
 Błędy odczytu (`CloudError.Unreadable`) mają rodzaj: brak frazy, zła fraza lub zmodyfikowane dane, nowsza wersja formatu, inny. Przy każdym z nich niczego się nie zapisuje.
+
+## Logi i raporty błędów
+
+Klucz i fraza nie trafiają do komunikatów błędów biblioteki (`CloudError`, `CloudException`), do `toString()` konfiguracji, formularza i żądania HTTP. Aplikacja, która loguje własne wyjątki albo wysyła raporty o błędach, przepuszcza tekst przez `Redactor`:
+
+```kotlin
+val redactor = Redactor.of(config)
+log.e(redactor.describe(error))
+report.attach(redactor.stackTrace(error))
+```
+
+`Redactor` zastępuje `***` znane sekrety (klucz, frazę) w każdym miejscu tekstu, a poza tym wartości pól `x-api-key`, `authorization`, `apiKey`, `passphrase`, `password` oraz dane logowania w adresie (`https://użytkownik:hasło@host`). `describe` przechodzi po łańcuchu przyczyn, `stackTrace` maskuje cały ślad stosu. Treść dokumentu użytkownika nie jest rozpoznawana: nie wkładaj jej do logów. **[kod]**
 
 ## Kopie eksportu
 

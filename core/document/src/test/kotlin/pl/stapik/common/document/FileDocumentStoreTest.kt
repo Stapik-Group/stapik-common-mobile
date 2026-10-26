@@ -2,7 +2,10 @@ package pl.stapik.common.document
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -133,6 +136,51 @@ class FileDocumentStoreTest {
         Unit
     }
 
+    private object LostKeyCipher : PayloadCipher {
+        override fun encrypt(plain: ByteArray) = plain
+
+        override fun decrypt(encrypted: ByteArray): ByteArray = throw javax.crypto.AEADBadTagException("key is gone")
+    }
+
+    @Test
+    fun `data that fails only in the cipher is reported as undecryptable`() = runBlocking {
+        store().save(doc("a"))
+        store().save(doc("b"))
+        val error = assertThrows(DocumentCorruptedException::class.java) { runBlocking { store(LostKeyCipher).load() } }
+        assertTrue(error.undecryptable)
+    }
+
+    @Test
+    fun `damaged content is not reported as undecryptable`() = runBlocking {
+        store().save(doc("a"))
+        corrupt(file("notes.json.doc"))
+        val error = assertThrows(DocumentCorruptedException::class.java) { runBlocking { store().load() } }
+        assertFalse(error.undecryptable)
+    }
+
+    @Test
+    fun `discarding removes the document and its backups but keeps conflict copies`() = runBlocking {
+        val s = store()
+        s.save(doc("a"))
+        s.save(doc("b"))
+        s.saveConflictCopy(ConflictCopy(slot, ConflictSource.LOCAL, Instant.ofEpochMilli(1_000), "{}"))
+        corrupt(file("notes.json.doc"))
+        s.discard()
+        assertFalse(Files.exists(file("notes.json.doc")))
+        assertFalse(Files.exists(file("notes.json.doc.bak")))
+        assertNull(s.load())
+        assertEquals(1, s.listConflictCopies().size)
+    }
+
+    @Test
+    fun `a document can be saved again after discarding unreadable data`() = runBlocking {
+        store().save(doc("a"))
+        corrupt(file("notes.json.doc"))
+        store().discard()
+        store().save(doc("fresh"))
+        assertTrue(text(store().load()).contains("fresh"))
+    }
+
     @Test
     fun `an unsupported format version counts as unreadable`() = runBlocking {
         Files.write(file("notes.json.doc"), """{"version":99,"content":"{}"}""".toByteArray())
@@ -161,6 +209,58 @@ class FileDocumentStoreTest {
         val onDisk = Files.newDirectoryStream(dir.resolve("conflicts")).use { it.toList() }
         assertEquals(2, onDisk.size)
         onDisk.forEach { assertFalse(String(Files.readAllBytes(it), Charsets.ISO_8859_1).contains("lastUpdate")) }
+    }
+
+    private val now = Instant.parse("2026-10-26T12:00:00Z")
+
+    private fun pruning(max: Int = 20, maxAge: Duration = Duration.ofDays(90)) =
+        FileDocumentStore(dir, slot, PayloadCipher.None, 3, Clock.fixed(now, ZoneOffset.UTC), max, maxAge)
+
+    private fun copy(at: Instant, source: ConflictSource = ConflictSource.LOCAL) = ConflictCopy(slot, source, at, "{}")
+
+    private suspend fun FileDocumentStore.saveAll(vararg copies: ConflictCopy) = copies.forEach { saveConflictCopy(it) }
+
+    @Test
+    fun `only the newest copies are kept`() = runBlocking {
+        val s = pruning(max = 3)
+        val times = (1L..5L).map { now.minusSeconds(100 - it) }
+        s.saveAll(*times.map { copy(it) }.toTypedArray())
+        assertEquals(times.takeLast(3).reversed(), s.listConflictCopies().map { it.createdAt })
+    }
+
+    @Test
+    fun `copies past the age limit are removed`() = runBlocking {
+        val s = pruning(maxAge = Duration.ofDays(30))
+        val fresh = (1L..3L).map { now.minusSeconds(it) }
+        val old = now.minus(Duration.ofDays(40))
+        s.saveAll(copy(old), *fresh.map { copy(it) }.toTypedArray())
+        assertEquals(fresh, s.listConflictCopies().map { it.createdAt })
+    }
+
+    @Test
+    fun `the newest few copies are kept even when all are old`() = runBlocking {
+        val s = pruning(maxAge = Duration.ofDays(30))
+        val old = (1L..5L).map { now.minus(Duration.ofDays(100)).plusSeconds(it) }
+        s.saveAll(*old.map { copy(it) }.toTypedArray())
+        assertEquals(old.takeLast(FileDocumentStore.PROTECTED_COPIES).reversed(), s.listConflictCopies().map { it.createdAt })
+    }
+
+    @Test
+    fun `pruning leaves the copies of other slots alone`() = runBlocking {
+        val other = FileDocumentStore(dir, SlotKey("calendar.json"), PayloadCipher.None, 3, Clock.fixed(now, ZoneOffset.UTC), 1)
+        val foreign = ConflictCopy(SlotKey("calendar.json"), ConflictSource.CLOUD, now.minusSeconds(500), "{}")
+        other.saveConflictCopy(foreign)
+        pruning(max = 1).saveAll(copy(now.minusSeconds(3)), copy(now.minusSeconds(2)), copy(now.minusSeconds(1)))
+        assertEquals(listOf(foreign), other.listConflictCopies())
+        assertEquals(1, pruning().listConflictCopies().size)
+    }
+
+    @Test
+    fun `copies that cannot be read are pruned too`() = runBlocking {
+        val encrypted = FileDocumentStore(dir, slot, MarkedCipher, 3, Clock.fixed(now, ZoneOffset.UTC), 1)
+        encrypted.saveAll(copy(now.minusSeconds(2)), copy(now.minusSeconds(1)))
+        val files = Files.newDirectoryStream(dir.resolve("conflicts")).use { it.toList() }
+        assertEquals(1, files.size)
     }
 
     @Test

@@ -11,6 +11,7 @@ class SyncToneTest {
         assertEquals(SyncTone.MUTED, SyncBadge.SYNCED.tone)
         assertEquals(SyncTone.ACTIVE, SyncBadge.SYNCING.tone)
         assertEquals(SyncTone.WARNING, SyncBadge.OFFLINE.tone)
+        assertEquals(SyncTone.WARNING, SyncBadge.CONFLICT_RESOLVED.tone)
         assertEquals(SyncTone.ERROR, SyncBadge.UNREADABLE.tone)
         assertEquals(SyncTone.ERROR, SyncBadge.AUTH.tone)
     }
@@ -25,5 +26,6 @@ class SyncToneTest {
     fun `only the synced state is quiet`() {
         assertTrue(SyncUiState(SyncBadge.SYNCED, "k").isQuiet)
         assertFalse(SyncUiState(SyncBadge.LOCAL_ONLY, "k").isQuiet)
+        assertFalse(SyncUiState(SyncBadge.CONFLICT_RESOLVED, "k").isQuiet)
     }
 }

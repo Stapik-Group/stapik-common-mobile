@@ -20,6 +20,7 @@ val modules = listOf(
     "core:presentation",
     "core:i18n",
     "core:theme",
+    "core:work",
     "ui:theme",
     "ui:components",
     "ui:sync",

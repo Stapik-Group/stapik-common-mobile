@@ -88,6 +88,36 @@ class MobileOnlyStoreTest {
         Unit
     }
 
+    private fun newerFile(version: Int = 2) =
+        """{"version":$version,"data":{"n":9,"fromTheFuture":true}}""".toByteArray().also { Files.write(dir.resolve("prefs.mobile"), it) }
+
+    @Test
+    fun `a file from a newer version is reported as such`() {
+        newerFile(3)
+        val error = assertThrows(NewerStoredVersionException::class.java) { runBlocking { store().load() } }
+        assertEquals(3, error.found)
+        assertEquals(1, error.supported)
+    }
+
+    @Test
+    fun `a file from a newer version is not replaced by save, update or import`() {
+        val original = newerFile()
+        assertThrows(NewerStoredVersionException::class.java) { runBlocking { store().save(Prefs(1)) } }
+        assertThrows(NewerStoredVersionException::class.java) { runBlocking { store().update { it.copy(n = 2) } } }
+        assertThrows(NewerStoredVersionException::class.java) { runBlocking { store().importJson("""{"version":1,"data":{"n":3}}""") } }
+        assertTrue(original.contentEquals(Files.readAllBytes(dir.resolve("prefs.mobile"))))
+        assertFalse(Files.exists(dir.resolve("prefs.mobile.bak")))
+    }
+
+    @Test
+    fun `an older backup does not stand in for a file from a newer version`() = runBlocking {
+        store().save(Prefs(1))
+        store().save(Prefs(2))
+        newerFile()
+        assertThrows(NewerStoredVersionException::class.java) { runBlocking { store().load() } }
+        Unit
+    }
+
     @Test
     fun `a different schema version is not read as valid`() = runBlocking {
         store(version = 1).save(Prefs(5))

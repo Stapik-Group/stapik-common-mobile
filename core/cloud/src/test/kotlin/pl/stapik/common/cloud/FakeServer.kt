@@ -12,6 +12,7 @@ class FakeServer : HttpTransport {
     var content: String? = null
     var version = 0
     var failWith: IOException? = null
+    var failWithError: Error? = null
     var forcedStatus: Int? = null
     var extraHeaders: Map<String, String> = emptyMap()
     var scope = "READ_WRITE"
@@ -37,6 +38,7 @@ class FakeServer : HttpTransport {
     override fun execute(request: HttpRequest): HttpResponse {
         requests += request
         failWith?.let { throw it }
+        failWithError?.let { throw it }
         if (rateLimits.isNotEmpty()) {
             val retry = rateLimits.removeFirst()
             return HttpResponse(429, if (retry != null) mapOf("retry-after" to retry) else emptyMap())

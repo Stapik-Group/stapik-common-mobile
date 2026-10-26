@@ -40,3 +40,7 @@ val store = ConnectionConfigStore(directory, KeystoreCiphers.create("stapikmedia
 ```
 
 `load()` robi blokujące I/O, więc wołaj je poza głównym wątkiem.
+
+## Zmiana `schemaVersion`
+
+Podniesienie `schemaVersion` nie kasuje klucza ani frazy: zapisana konfiguracja przechodzi przez `ConfigMigration` (domyślnie `KeepAsIs`) i jest zapisywana od nowa pod bieżącą wersją. Aplikacja, która musi przemienić stare dane (na przykład inny adres), podaje własną migrację przez parametr `migration`. Dopiero migracja zwracająca `null` usuwa konfigurację (`ConfigLoad.SchemaReset`) i użytkownik łączy się od nowa. Konfiguracja o wersji nowszej niż `schemaVersion` nie jest ruszana (`ConfigLoad.NewerSchema`), tak samo nieczytelna (`ConfigLoad.Unreadable`).

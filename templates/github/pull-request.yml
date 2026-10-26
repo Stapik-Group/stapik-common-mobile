@@ -13,5 +13,5 @@ jobs:
   build:
     if: github.head_ref == 'develop'
     # Pin @v... to the release of stapik-common-mobile that the submodule is on.
-    uses: Stapik-Group/stapik-common-mobile/.github/workflows/build.yml@v0.1.0
+    uses: Stapik-Group/stapik-common-mobile/.github/workflows/build.yml@v0.2.0
     secrets: inherit

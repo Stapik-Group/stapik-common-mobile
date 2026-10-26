@@ -7,7 +7,7 @@ val SyncBadge.tone: SyncTone
     get() = when (this) {
         SyncBadge.LOCAL_ONLY, SyncBadge.SYNCED -> SyncTone.MUTED
         SyncBadge.SYNCING -> SyncTone.ACTIVE
-        SyncBadge.PENDING, SyncBadge.OFFLINE, SyncBadge.NEEDS_CHOICE, SyncBadge.READ_ONLY -> SyncTone.WARNING
+        SyncBadge.PENDING, SyncBadge.OFFLINE, SyncBadge.NEEDS_CHOICE, SyncBadge.READ_ONLY, SyncBadge.CONFLICT_RESOLVED -> SyncTone.WARNING
         SyncBadge.AUTH, SyncBadge.UNREADABLE, SyncBadge.NEWER_SCHEMA -> SyncTone.ERROR
     }
 

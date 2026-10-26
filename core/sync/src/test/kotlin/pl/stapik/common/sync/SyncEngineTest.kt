@@ -1,7 +1,11 @@
 package pl.stapik.common.sync
 
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
@@ -51,6 +55,54 @@ class SyncEngineTest {
         assertEquals(Notes(listOf("a")), f.engine.load())
         assertTrue(f.store.document!!.dirty)
         assertEquals(SyncStatus.IDLE, f.engine.status.value)
+    }
+
+    @Test
+    fun `a local edit does not touch the cloud`() = runBlocking {
+        val f = fixture()
+        assertEquals(null, f.engine.editLocally { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("a")), f.engine.load())
+        assertTrue(f.engine.hasPendingChanges())
+        assertEquals(null, f.gateway.document)
+        assertEquals(SyncStatus.IDLE, f.engine.status.value)
+        assertEquals(SyncOutcome.Synchronized, f.engine.sync())
+        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
+    }
+
+    @Test
+    fun `after the local document is discarded the next sync takes the cloud`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
+        f.engine.editLocally { Notes(listOf("local only")) }
+        f.engine.discardLocalDocument()
+        assertEquals(SyncOutcome.Synchronized, f.engine.sync())
+        assertEquals(Notes(listOf("cloud")), f.engine.load())
+        assertTrue(f.store.copies.isEmpty())
+    }
+
+    @Test
+    fun `detaching keeps the content and forgets the cloud`() = runBlocking {
+        val f = fixture()
+        f.engine.edit { Notes(listOf("a")) }
+        f.engine.detachFromCloud()
+        val stored = checkNotNull(f.store.document)
+        assertFalse(stored.everSynchronized)
+        assertEquals(null, stored.cloudIdentity)
+        assertEquals(Notes(listOf("a")), f.engine.load())
+    }
+
+    @Test
+    fun `after detaching, the same cloud is a first connection again`() = runBlocking {
+        val f = fixture()
+        f.engine.edit { Notes(listOf("a")) }
+        f.engine.detachFromCloud()
+        assertEquals(SyncOutcome.NeedsFirstConnectionChoice(true), f.engine.sync())
+    }
+
+    @Test
+    fun `detaching with nothing stored does nothing`() = runBlocking {
+        val f = fixture()
+        f.engine.detachFromCloud()
+        assertEquals(null, f.store.document)
     }
 
     @Test
@@ -145,6 +197,23 @@ class SyncEngineTest {
     }
 
     @Test
+    fun `a sync cancelled while it waits does not hide the one that is running`() = runBlocking {
+        val f = fixture()
+        val gate = CompletableDeferred<Unit>()
+        f.gateway.gate = gate
+        val running = launch { f.engine.sync() }
+        yield()
+        assertEquals(SyncStatus.SYNCING, f.engine.status.value)
+        val waiting = launch { f.engine.sync() }
+        yield()
+        waiting.cancelAndJoin()
+        assertEquals(SyncStatus.SYNCING, f.engine.status.value)
+        gate.complete(Unit)
+        running.join()
+        assertEquals(SyncStatus.IDLE, f.engine.status.value)
+    }
+
+    @Test
     fun `a rejected key is reported and the edit is kept`() = runBlocking {
         val f = fixture().apply { gateway.failure = CloudError.Unauthorized }
         assertEquals(SyncOutcome.AuthProblem(CloudError.Unauthorized), f.engine.edit { Notes(listOf("a")) })
@@ -178,28 +247,35 @@ class SyncEngineTest {
     }
 
     @Test
-    fun `a lost race is retried and the newer local version wins`() = runBlocking {
+    fun `a lost race gives the win to the server and keeps the local edit as a conflict copy`() = runBlocking {
         val f = fixture().apply { gateway.document = remote(t0, emptyList()) }
         f.engine.sync()
-        var runs = 0
-        f.gateway.onBeforeWrite = {
-            if (runs++ == 0) f.gateway.document = remote("2026-10-16T09:00:00Z", listOf("server"))
-        }
-        assertEquals(SyncOutcome.LocalWon, f.engine.edit { Notes(listOf("a")) })
-        assertEquals(Notes(listOf("a")), decode(f.gateway.document))
-        assertEquals(ConflictSource.CLOUD, f.store.copies.single().source)
+        f.gateway.onBeforeWrite = { f.gateway.document = remote("2026-10-16T09:00:00Z", listOf("server")) }
+        assertEquals(SyncOutcome.ServerWon, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("server")), f.engine.load())
+        val copy = f.store.copies.single()
+        assertEquals(ConflictSource.LOCAL, copy.source)
+        assertEquals(Notes(listOf("a")), codec.decode(DocumentEnvelope.parse(copy.content)))
+        assertFalse(f.store.document!!.dirty)
     }
 
     @Test
-    fun `when the server keeps changing, the server version wins after three attempts`() = runBlocking {
+    fun `the winner does not depend on the device clock`() = runBlocking {
         val f = fixture().apply { gateway.document = remote(t0, emptyList()) }
         f.engine.sync()
-        var n = 0
-        f.gateway.onBeforeWrite = {
-            f.gateway.document = remote("2026-10-16T09:00:0${n++}Z", listOf("server$n"))
-        }
+        f.clock.now = Instant.parse("2099-01-01T00:00:00Z")
+        f.gateway.onBeforeWrite = { f.gateway.document = remote("2026-10-16T09:00:00Z", listOf("server")) }
         assertEquals(SyncOutcome.ServerWon, f.engine.edit { Notes(listOf("a")) })
-        assertEquals(Notes(listOf("server3")), f.engine.load())
+        assertEquals(Notes(listOf("server")), f.engine.load())
+    }
+
+    @Test
+    fun `when every write is refused as a conflict, the server version wins after three attempts`() = runBlocking {
+        val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
+        f.engine.sync()
+        f.gateway.onBeforeWrite = { throw CloudException(CloudError.Conflict) }
+        assertEquals(SyncOutcome.ServerWon, f.engine.edit { Notes(listOf("a")) })
+        assertEquals(Notes(listOf("cloud")), f.engine.load())
         assertEquals(1, f.store.copies.count { it.source == ConflictSource.LOCAL })
         assertFalse(f.store.document!!.dirty)
     }

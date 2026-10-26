@@ -3,6 +3,7 @@ package pl.stapik.common.cloud.layers
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.util.Base64
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -24,7 +25,7 @@ internal object GzipLayer {
     const val FORMAT = "stapik-gzip"
     const val VERSION = 1
     const val DEFAULT_THRESHOLD_BYTES = 32 * 1024
-    const val MAX_DECOMPRESSED_BYTES = 256L * 1024 * 1024
+    const val MAX_DECOMPRESSED_BYTES = 32L * 1024 * 1024
 
     fun seal(text: String, thresholdBytes: Int = DEFAULT_THRESHOLD_BYTES): String {
         val bytes = text.toByteArray(Charsets.UTF_8)
@@ -43,7 +44,7 @@ internal object GzipLayer {
     }
 
     /** Returns the original text; text that is not a gzip blob is returned unchanged. */
-    fun open(text: String): String {
+    fun open(text: String, maxDecompressedBytes: Long = MAX_DECOMPRESSED_BYTES): String {
         if (!text.contains(FORMAT)) return text
         val root = JsonProbe.parseObject(text) ?: return text
         if (JsonProbe.string(root, "format") != FORMAT) return text
@@ -59,13 +60,13 @@ internal object GzipLayer {
             throw unreadable("The compressed cloud data is damaged")
         }
         return try {
-            GZIPInputStream(ByteArrayInputStream(compressed)).use { readLimited(it) }.toString(Charsets.UTF_8)
+            GZIPInputStream(ByteArrayInputStream(compressed)).use { readLimited(it, maxDecompressedBytes) }.toString(Charsets.UTF_8)
         } catch (e: IOException) {
             throw unreadable("Cannot decompress the cloud data")
         }
     }
 
-    private fun readLimited(input: java.io.InputStream): ByteArray {
+    private fun readLimited(input: InputStream, maxBytes: Long): ByteArray {
         val out = ByteArrayOutputStream()
         val buffer = ByteArray(64 * 1024)
         var total = 0L
@@ -73,7 +74,7 @@ internal object GzipLayer {
             val read = input.read(buffer)
             if (read < 0) break
             total += read
-            if (total > MAX_DECOMPRESSED_BYTES) throw unreadable("The decompressed cloud data is too large")
+            if (total > maxBytes) throw unreadable("The decompressed cloud data is too large")
             out.write(buffer, 0, read)
         }
         return out.toByteArray()

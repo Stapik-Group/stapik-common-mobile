@@ -1,12 +1,16 @@
 package pl.stapik.common.cloud
 
 import java.io.IOException
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Test
 import org.junit.Assert.assertEquals
 import pl.stapik.common.cloud.assertFailsWith
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -14,12 +18,14 @@ import kotlinx.serialization.json.JsonObject
 import pl.stapik.common.model.CloudScope
 import pl.stapik.common.model.SlotKey
 import pl.stapik.common.sync.CloudError
+import kotlin.coroutines.CoroutineContext
 
 class HttpCloudGatewayTest {
     private val slot = SlotKey("budget.json")
     private val server = FakeServer()
     private val sleeps = mutableListOf<Long>()
     private val expiries = mutableListOf<Instant>()
+    private var uptime = 0L
 
     private fun gateway(passphrase: String? = null, url: String = " https://cloud.example/ ") = HttpCloudGateway(
         CloudConfig(url, "key-1", passphrase),
@@ -27,7 +33,25 @@ class HttpCloudGatewayTest {
         onApiKeyExpiry = { expiries += it },
         sleeper = { sleeps += it },
         dispatcher = Dispatchers.Unconfined,
+        uptimeMillis = { uptime },
+        clock = Clock.fixed(Instant.parse("2026-10-26T12:00:00Z"), ZoneOffset.UTC),
     )
+
+    private fun infoRequests() = server.requests.count { it.url.endsWith("/me") }
+
+    private fun gatewayOn(dispatcher: CoroutineDispatcher, passphrase: String? = null) = HttpCloudGateway(
+        CloudConfig("https://cloud.example", "key-1", passphrase),
+        server,
+        sleeper = { sleeps += it },
+        dispatcher = dispatcher,
+    )
+
+    private fun countingDispatcher(counter: AtomicInteger) = object : CoroutineDispatcher() {
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            counter.incrementAndGet()
+            block.run()
+        }
+    }
 
     private fun errorOf(block: suspend () -> Unit): CloudError =
         assertFailsWith<pl.stapik.common.sync.CloudException> { runBlocking { block() } }.error
@@ -47,6 +71,46 @@ class HttpCloudGatewayTest {
         assertEquals("https://cloud.example|ext-1", info.identity)
         server.scope = "READ_ONLY"
         assertEquals(CloudScope.READ_ONLY, gateway().info().scope)
+    }
+
+    @Test
+    fun `info is asked once within the time to live`() = runBlocking {
+        val g = gateway()
+        val first = g.info()
+        uptime = HttpCloudGateway.DEFAULT_INFO_TTL_MILLIS - 1
+        assertEquals(first, g.info())
+        assertEquals(1, infoRequests())
+    }
+
+    @Test
+    fun `info is asked again after the time to live`() = runBlocking {
+        val g = gateway()
+        g.info()
+        uptime = HttpCloudGateway.DEFAULT_INFO_TTL_MILLIS
+        g.info()
+        assertEquals(2, infoRequests())
+    }
+
+    @Test
+    fun `a rejected key makes the next info ask again`() = runBlocking {
+        val g = gateway()
+        g.info()
+        server.forcedStatus = 403
+        assertEquals(CloudError.Forbidden, errorOf { g.read(slot) })
+        server.forcedStatus = null
+        g.info()
+        assertEquals(2, infoRequests())
+    }
+
+    @Test
+    fun `a failed info is not remembered`() = runBlocking {
+        val g = gateway()
+        server.forcedStatus = 503
+        assertEquals(CloudError.ServerError(503), errorOf { g.info() })
+        server.forcedStatus = null
+        g.info()
+        g.info()
+        assertEquals(2, infoRequests())
     }
 
     @Test
@@ -72,6 +136,23 @@ class HttpCloudGatewayTest {
         g.write(slot, """{"v":2}""", first.updatedAt)
         assertEquals(listOf("PUT", "GET", "PUT"), server.requests.map { it.method })
     }
+
+    @Test
+    fun `a baseline in another notation of the same time needs no extra read`() = runBlocking {
+        val g = gateway()
+        val first = g.write(slot, """{"v":1}""", "")
+        g.write(slot, """{"v":2}""", respelled(first.updatedAt))
+        assertEquals(listOf("PUT", "PUT"), server.requests.map { it.method })
+    }
+
+    @Test
+    fun `a fresh gateway accepts a baseline in another notation of the same time`() = runBlocking {
+        val first = gateway().write(slot, """{"v":1}""", "")
+        gateway().write(slot, """{"v":2}""", respelled(first.updatedAt))
+        assertEquals(listOf("PUT", "GET", "PUT"), server.requests.map { it.method })
+    }
+
+    private fun respelled(updatedAt: String) = updatedAt.removeSuffix("Z") + ".000+00:00"
 
     @Test
     fun `stale baseline is a conflict without a PUT`() {
@@ -141,9 +222,53 @@ class HttpCloudGatewayTest {
     }
 
     @Test
+    fun `a redirect is a server error`() {
+        server.forcedStatus = 302
+        assertEquals(CloudError.ServerError(302), errorOf { gateway().read(slot) })
+    }
+
+    @Test
     fun `io failure is a network error`() {
         server.failWith = IOException("down")
         assertEquals(CloudError.Network("down"), errorOf { gateway().read(slot) })
+    }
+
+    @Test
+    fun `running out of memory is an unreadable document`() {
+        server.failWithError = OutOfMemoryError()
+        val error = errorOf { gateway().read(slot) }
+        assertTrue(error is CloudError.Unreadable)
+    }
+
+    @Test
+    fun `reading hands the transport, parsing and decoding to the dispatcher`() {
+        server.content = """{"v":1}"""
+        val dispatches = AtomicInteger()
+        runBlocking { gatewayOn(countingDispatcher(dispatches), passphrase = "pw").read(slot) }
+        assertEquals(3, dispatches.get())
+    }
+
+    @Test
+    fun `writing hands sealing, the transport and parsing to the dispatcher`() {
+        val dispatches = AtomicInteger()
+        runBlocking { gatewayOn(countingDispatcher(dispatches), passphrase = "pw").write(slot, """{"v":1}""", "") }
+        assertEquals(3, dispatches.get())
+    }
+
+    @Test
+    fun `a response over the limit is an unreadable document`() {
+        server.failWith = ResponseTooLargeException(1024)
+        assertTrue(errorOf { gateway().read(slot) } is CloudError.Unreadable)
+    }
+
+    @Test
+    fun `every request carries the response limit`() = runBlocking {
+        val g = gateway()
+        val first = g.write(slot, """{"v":1}""", "")
+        g.read(slot)
+        g.info()
+        g.write(slot, """{"v":2}""", first.updatedAt)
+        assertTrue(server.requests.all { it.maxResponseBytes == HttpCloudGateway.DEFAULT_MAX_RESPONSE_BYTES })
     }
 
     @Test
@@ -151,6 +276,46 @@ class HttpCloudGatewayTest {
         server.rateLimits += "2"
         assertNull(gateway().read(slot))
         assertEquals(listOf(2000L), sleeps)
+    }
+
+    @Test
+    fun `a rate limit given as an http date is waited out`() = runBlocking {
+        server.rateLimits += "Mon, 26 Oct 2026 12:00:02 GMT"
+        assertNull(gateway().read(slot))
+        assertEquals(listOf(2000L), sleeps)
+    }
+
+    @Test
+    fun `a partly elapsed second in an http date is rounded up`() = runBlocking {
+        server.rateLimits += "Mon, 26 Oct 2026 12:00:01 GMT"
+        gateway().read(slot)
+        assertEquals(listOf(1000L), sleeps)
+    }
+
+    @Test
+    fun `an http date in the past means retry at once`() = runBlocking {
+        server.rateLimits += "Mon, 26 Oct 2026 11:59:00 GMT"
+        gateway().read(slot)
+        assertEquals(listOf(0L), sleeps)
+    }
+
+    @Test
+    fun `a distant http date is reported in seconds`() {
+        server.rateLimits += "Mon, 26 Oct 2026 12:05:00 GMT"
+        assertEquals(CloudError.RateLimited(300), errorOf { gateway().read(slot) })
+        assertTrue(sleeps.isEmpty())
+    }
+
+    @Test
+    fun `a retry after that is neither seconds nor a date is unknown`() {
+        server.rateLimits += "soon"
+        assertEquals(CloudError.RateLimited(null), errorOf { gateway().read(slot) })
+    }
+
+    @Test
+    fun `a negative retry after is unknown`() {
+        server.rateLimits += "-5"
+        assertEquals(CloudError.RateLimited(null), errorOf { gateway().read(slot) })
     }
 
     @Test

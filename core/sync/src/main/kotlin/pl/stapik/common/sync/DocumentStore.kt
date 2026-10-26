@@ -32,6 +32,9 @@ interface DocumentStore {
     suspend fun save(document: LocalDocument<DocumentEnvelope>)
 
     suspend fun saveConflictCopy(copy: ConflictCopy)
+
+    /** Deletes the stored document and its backups, readable or not; conflict copies stay. */
+    suspend fun discard()
 }
 
 /** Replaces the whole local document; implemented by [SyncEngine], separate so importers can be tested without an engine. */

@@ -49,19 +49,23 @@ class SyncEngine<T>(
      * The edit is kept whatever the returned outcome is, except [SyncOutcome.NewerSchema]: a
      * document written with a newer schema than the app understands is never edited.
      */
-    suspend fun edit(transform: (T) -> T): SyncOutcome {
-        mutex.withLock {
-            val local = loadLocal()
-            if (schemaGate != null) {
-                val newer = schemaGate.newerVersionOf(local.content)
-                if (newer != null) return SyncOutcome.NewerSchema(newer, schemaGate.supported)
-            }
-            val updated = transform(codec.decode(local.content))
-            val now = clock.instant()
-            val envelope = codec.encode(updated, local.content, now.truncatedTo(ChronoUnit.SECONDS).toString())
-            store.save(local.edited(envelope, now))
+    suspend fun edit(transform: (T) -> T): SyncOutcome = editLocally(transform) ?: sync()
+
+    /**
+     * The local half of [edit]: applies [transform] and saves it, without touching the cloud.
+     * Returns [SyncOutcome.NewerSchema] when the document was refused, null when it was saved.
+     */
+    suspend fun editLocally(transform: (T) -> T): SyncOutcome.NewerSchema? = mutex.withLock {
+        val local = loadLocal()
+        if (schemaGate != null) {
+            val newer = schemaGate.newerVersionOf(local.content)
+            if (newer != null) return@withLock SyncOutcome.NewerSchema(newer, schemaGate.supported)
         }
-        return sync()
+        val updated = transform(codec.decode(local.content))
+        val now = clock.instant()
+        val envelope = codec.encode(updated, local.content, now.truncatedTo(ChronoUnit.SECONDS).toString())
+        store.save(local.edited(envelope, now))
+        null
     }
 
     /**
@@ -79,10 +83,10 @@ class SyncEngine<T>(
     }
 
     /** Synchronises with the cloud, if one is configured. [choice] answers [SyncOutcome.NeedsFirstConnectionChoice]. */
-    suspend fun sync(choice: FirstConnectionChoice? = null): SyncOutcome {
+    suspend fun sync(choice: FirstConnectionChoice? = null): SyncOutcome = mutex.withLock {
         mutableStatus.value = SyncStatus.SYNCING
-        val outcome = try {
-            mutex.withLock { runSync(choice) }
+        try {
+            runSync(choice).also { mutableStatus.value = it.toStatus() }
         } catch (e: CancellationException) {
             mutableStatus.value = SyncStatus.IDLE
             throw e
@@ -90,9 +94,16 @@ class SyncEngine<T>(
             mutableStatus.value = SyncStatus.ERROR
             throw e
         }
-        mutableStatus.value = outcome.toStatus()
-        return outcome
     }
+
+    /** Forgets the cloud the document was synchronised with (disconnect): the content and unsent changes stay. */
+    suspend fun detachFromCloud() = mutex.withLock {
+        store.load()?.let { store.save(it.detachedFromCloud()) }
+        mutableStatus.value = SyncStatus.IDLE
+    }
+
+    /** Deletes the local document. For data that cannot be read; changes not yet sent to the cloud are lost. */
+    suspend fun discardLocalDocument() = mutex.withLock { store.discard() }
 
     /** Whether there are local changes not yet sent to the cloud. */
     suspend fun hasPendingChanges(): Boolean = mutex.withLock { loadLocal().dirty }

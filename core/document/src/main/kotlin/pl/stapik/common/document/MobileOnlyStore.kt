@@ -24,8 +24,9 @@ import kotlinx.serialization.json.int
  *
  * @param name file name stem; one store per name in [directory].
  * @param default what [load] returns when nothing has been stored yet.
- * @param schemaVersion a stored file with a different version is reported as corrupted for now;
- *   migrations are added when the first schema change needs one.
+ * @param schemaVersion a stored file with a newer version raises [NewerStoredVersionException] and
+ *   is never overwritten or replaced by a backup; one with an older version is reported as
+ *   corrupted for now, migrations are added when the first schema change needs one.
  */
 class MobileOnlyStore<T>(
     directory: Path,
@@ -92,6 +93,7 @@ class MobileOnlyStore<T>(
         val root = json.parseToJsonElement(bytes.toString(Charsets.UTF_8)) as? JsonObject
             ?: throw IllegalArgumentException("Stored data is not a JSON object")
         val version = (root[VERSION] as? JsonPrimitive)?.int
+        if (version != null && version > schemaVersion) throw NewerStoredVersionException(version, schemaVersion)
         require(version == schemaVersion) { "Unsupported stored version: $version" }
         val data = root[DATA] ?: throw IllegalArgumentException("Stored data has no 'data'")
         return json.decodeFromJsonElement(serializer, data)

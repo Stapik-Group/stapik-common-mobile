@@ -22,6 +22,9 @@ data class CloudConfig(
     /** Base of all API calls, ending with a slash: `<url>/api/v1/`. */
     val baseUrl: String get() = "$normalizedApiUrl/api/v1/"
 
+    override fun toString(): String =
+        "CloudConfig(apiUrl=$apiUrl, apiKey=$MASK, passphrase=${passphrase?.let { MASK }})"
+
     val urlStatus: ApiUrlStatus
         get() {
             val url = normalizedApiUrl
@@ -35,4 +38,8 @@ data class CloudConfig(
 
     private fun hasSchemeAndHost(url: String, scheme: String): Boolean =
         url.length > scheme.length && url.regionMatches(0, scheme, 0, scheme.length, ignoreCase = true)
+
+    private companion object {
+        const val MASK = "***"
+    }
 }

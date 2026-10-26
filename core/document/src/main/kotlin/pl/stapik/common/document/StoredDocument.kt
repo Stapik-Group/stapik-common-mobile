@@ -26,7 +26,7 @@ internal data class StoredDocument(
             cloudBaseline = cloudBaseline,
             dirty = dirty,
             modifiedAt = modifiedAt?.let(Instant::parse),
-            scope = scope?.let { CloudScope.valueOf(it) },
+            scope = scope?.let(CloudScope::fromWire),
             cloudIdentity = cloudIdentity,
         )
     }

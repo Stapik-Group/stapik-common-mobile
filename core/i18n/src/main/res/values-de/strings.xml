@@ -41,6 +41,7 @@
     <string name="action_enter_passphrase">Passphrase eingeben</string>
     <string name="action_choose_source">Auswählen</string>
     <string name="action_update_app">App aktualisieren</string>
+    <string name="action_dismiss">Verstanden</string>
     <string name="theme_classic">Klassisch</string>
     <string name="theme_classic_pink">Klassisch Pink</string>
     <string name="theme_modern">Modern</string>
@@ -61,7 +62,12 @@
     <string name="action_back">Zurück</string>
     <string name="load_loading">Wird geladen…</string>
     <string name="load_error_corrupted">Die Daten auf diesem Gerät sind beschädigt und können nicht gelesen werden.</string>
+    <string name="load_error_undecryptable">Die Daten auf diesem Gerät lassen sich nicht mehr entsperren. Das passiert, wenn die App-Daten auf einem anderen Gerät wiederhergestellt werden oder der sichere Schlüsselspeicher zurückgesetzt wird. Wenn Sie die Cloud nutzen, ist das Dokument dort weiterhin vorhanden.</string>
     <string name="load_error_model_mismatch">Die Daten wurden von einer anderen Version der App gespeichert und können nicht gelesen werden.</string>
+    <string name="load_error_discard_action">Erneut aus der Cloud laden</string>
+    <string name="load_error_discard_title">Daten auf diesem Gerät verwerfen?</string>
+    <string name="load_error_discard_message">Die unlesbaren Daten auf diesem Gerät werden gelöscht und das Dokument wird erneut aus der Cloud geladen. Dafür ist eine Verbindung zur Cloud nötig, und Änderungen, die nie an die Cloud gesendet wurden, gehen verloren.</string>
+    <string name="load_error_discard_confirm">Verwerfen und laden</string>
     <string name="load_error_unknown">Die Daten konnten nicht geladen werden.</string>
     <string name="choice_title">Daten auf diesem Gerät und in der Cloud</string>
     <string name="choice_message">Sowohl dieses Gerät als auch die Cloud enthalten Daten. Welche Version möchten Sie behalten?</string>
