@@ -1,7 +1,9 @@
 package pl.stapik.common.cloud
 
 import java.io.IOException
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Test
 import org.junit.Assert.assertEquals
@@ -32,6 +34,7 @@ class HttpCloudGatewayTest {
         sleeper = { sleeps += it },
         dispatcher = Dispatchers.Unconfined,
         uptimeMillis = { uptime },
+        clock = Clock.fixed(Instant.parse("2026-10-26T12:00:00Z"), ZoneOffset.UTC),
     )
 
     private fun infoRequests() = server.requests.count { it.url.endsWith("/me") }
@@ -273,6 +276,46 @@ class HttpCloudGatewayTest {
         server.rateLimits += "2"
         assertNull(gateway().read(slot))
         assertEquals(listOf(2000L), sleeps)
+    }
+
+    @Test
+    fun `a rate limit given as an http date is waited out`() = runBlocking {
+        server.rateLimits += "Mon, 26 Oct 2026 12:00:02 GMT"
+        assertNull(gateway().read(slot))
+        assertEquals(listOf(2000L), sleeps)
+    }
+
+    @Test
+    fun `a partly elapsed second in an http date is rounded up`() = runBlocking {
+        server.rateLimits += "Mon, 26 Oct 2026 12:00:01 GMT"
+        gateway().read(slot)
+        assertEquals(listOf(1000L), sleeps)
+    }
+
+    @Test
+    fun `an http date in the past means retry at once`() = runBlocking {
+        server.rateLimits += "Mon, 26 Oct 2026 11:59:00 GMT"
+        gateway().read(slot)
+        assertEquals(listOf(0L), sleeps)
+    }
+
+    @Test
+    fun `a distant http date is reported in seconds`() {
+        server.rateLimits += "Mon, 26 Oct 2026 12:05:00 GMT"
+        assertEquals(CloudError.RateLimited(300), errorOf { gateway().read(slot) })
+        assertTrue(sleeps.isEmpty())
+    }
+
+    @Test
+    fun `a retry after that is neither seconds nor a date is unknown`() {
+        server.rateLimits += "soon"
+        assertEquals(CloudError.RateLimited(null), errorOf { gateway().read(slot) })
+    }
+
+    @Test
+    fun `a negative retry after is unknown`() {
+        server.rateLimits += "-5"
+        assertEquals(CloudError.RateLimited(null), errorOf { gateway().read(slot) })
     }
 
     @Test

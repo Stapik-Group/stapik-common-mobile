@@ -1,7 +1,11 @@
 package pl.stapik.common.cloud
 
 import java.io.IOException
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +32,7 @@ import pl.stapik.common.sync.RemoteDocument
  * not match the caller's baseline it reads the document once, and a different `updatedAt` is a
  * conflict without sending anything. `clientLastKnownUpdate` is sent as well for older servers.
  *
- * A 429 with `Retry-After` of up to [MAX_AUTO_WAIT_SECONDS] is waited out once; anything longer is
+ * A 429 with `Retry-After` (seconds or an HTTP date) of up to [MAX_AUTO_WAIT_SECONDS] is waited out once; anything longer is
  * reported as [CloudError.RateLimited].
  *
  * @param onApiKeyExpiry called with the expiry time announced by the server (`X-Api-Key-Expires-At`).
@@ -44,6 +48,7 @@ class HttpCloudGateway(
     private val maxResponseBytes: Long = DEFAULT_MAX_RESPONSE_BYTES,
     private val infoTtlMillis: Long = DEFAULT_INFO_TTL_MILLIS,
     private val uptimeMillis: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val clock: Clock = Clock.systemUTC(),
 ) : CloudGateway {
 
     private class Known(val updatedAt: String, val etag: String?)
@@ -184,7 +189,20 @@ class HttpCloudGateway(
         )
     }
 
-    private fun retryAfter(response: HttpResponse): Long? = response.header("retry-after")?.trim()?.toLongOrNull()
+    private fun retryAfter(response: HttpResponse): Long? {
+        val text = response.header("retry-after")?.trim() ?: return null
+        val seconds = text.toLongOrNull() ?: secondsUntil(text)
+        return seconds?.takeIf { it >= 0 }
+    }
+
+    private fun secondsUntil(httpDate: String): Long? =
+        try {
+            val at = ZonedDateTime.parse(httpDate, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()
+            val millis = Duration.between(clock.instant(), at).toMillis().coerceAtLeast(0)
+            (millis + 999) / 1000
+        } catch (_: DateTimeParseException) {
+            null
+        }
 
     private suspend fun send(request: HttpRequest): HttpResponse {
         var response = execute(request)

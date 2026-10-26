@@ -48,7 +48,7 @@ Czy serwer przyjmuje jednocześnie `If-Match` i `clientLastKnownUpdate`: **[zał
 | `403` | `Forbidden` – klucz bez uprawnień |
 | `404` | brak dokumentu (tylko odczyt) |
 | `409` | `Conflict` |
-| `429` | `Retry-After` ≤ 30 s: klient czeka i ponawia raz; dłużej: `RateLimited(retryAfter)` |
+| `429` | `Retry-After` (sekundy albo data HTTP) ≤ 30 s: klient czeka i ponawia raz; dłużej: `RateLimited(retryAfter)`, a ponowienie bierze na siebie tło. Data HTTP jest liczona względem zegara urządzenia, ujemna lub nierozpoznana wartość to „nieznane” |
 | `3xx` | `ServerError(kod)` – przekierowanie nie jest wykonywane; adres w ustawieniach ma wskazywać wprost na API |
 | inne ≥ 400 | `ServerError(kod)` |
 | brak odpowiedzi | `Network` |
