@@ -9,6 +9,10 @@ import java.nio.file.StandardCopyOption
 class DocumentCorruptedException(val files: List<Path>, cause: Throwable? = null) :
     Exception("Stored data is unreadable: ${files.joinToString { it.fileName.toString() }}", cause)
 
+/** The stored data was written by a newer version of the app than this one; it must be neither replaced nor read from a backup. */
+class NewerStoredVersionException(val found: Int, val supported: Int) :
+    Exception("Stored data has format version $found, this app understands up to $supported")
+
 /**
  * One logical file with atomic writes, rotating backups and recovery; shared by every store that
  * keeps its data in a single file.
@@ -21,6 +25,8 @@ class DocumentCorruptedException(val files: List<Path>, cause: Throwable? = null
  * - **Recovery:** [read] returns the newest readable version and says whether it was a backup.
  *   If files exist but none is readable it throws [DocumentCorruptedException]; it never quietly
  *   returns "nothing".
+ * - **Newer format:** a `parse` that throws [NewerStoredVersionException] stops [read] at once (no
+ *   backup is tried) and makes [write] refuse to replace the file.
  *
  * "Readable" means: decrypts with the [cipher] and is accepted by the caller's `parse` function.
  * Blocking I/O; the caller chooses the dispatcher. Not thread-safe.
@@ -52,6 +58,8 @@ class BackedFile(
         for (path in candidates) {
             try {
                 return Loaded(parse(cipher.decrypt(Files.readAllBytes(path))), fromBackup = path != current)
+            } catch (e: NewerStoredVersionException) {
+                throw e
             } catch (e: Exception) {
                 lastError = e
             }
@@ -79,6 +87,8 @@ class BackedFile(
         val readable = try {
             parse(cipher.decrypt(Files.readAllBytes(current)))
             true
+        } catch (e: NewerStoredVersionException) {
+            throw e
         } catch (e: Exception) {
             false
         }
