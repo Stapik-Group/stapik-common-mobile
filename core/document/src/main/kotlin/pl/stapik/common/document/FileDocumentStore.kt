@@ -27,6 +27,9 @@ import pl.stapik.common.sync.DocumentStore
  * and of those, any older than [conflictCopyMaxAge] go too, except the newest [PROTECTED_COPIES]
  * which are always kept.
  *
+ * One store holds one [SlotKey]; a partition of a slot is a slot of its own here, with its own
+ * files, backups and conflict copies, so partitions never touch each other.
+ *
  * Not thread-safe by itself: the sync engine calls it under its own mutex.
  */
 class FileDocumentStore(
@@ -39,7 +42,8 @@ class FileDocumentStore(
     private val conflictCopyMaxAge: Duration = DEFAULT_CONFLICT_COPY_MAX_AGE,
 ) : DocumentStore {
 
-    private val file = BackedFile(directory, "${slot.value}.doc", cipher, backupCount)
+    private val stem: String = slot.partition?.let { "${slot.value}@$it" } ?: slot.value
+    private val file = BackedFile(directory, "$stem.doc", cipher, backupCount)
     private val conflictsDir: Path = directory.resolve("conflicts")
 
     /** True if the last [load] could not use the current file and returned a backup instead. */
@@ -59,7 +63,7 @@ class FileDocumentStore(
 
     override suspend fun saveConflictCopy(copy: ConflictCopy) = withContext(Dispatchers.IO) {
         Files.createDirectories(conflictsDir)
-        val name = "${copy.slot.value}.${copy.createdAt.toEpochMilli()}.${copy.source.name}.json"
+        val name = "$stem.${copy.createdAt.toEpochMilli()}.${copy.source.name}.json"
         val temp = conflictsDir.resolve("$name.tmp")
         writeAndFlush(temp, cipher.encrypt(copy.content.toByteArray(Charsets.UTF_8)))
         Files.move(temp, conflictsDir.resolve(name), StandardCopyOption.ATOMIC_MOVE)
@@ -89,8 +93,7 @@ class FileDocumentStore(
         if (parts.size < 3) return null
         val source = runCatching { ConflictSource.valueOf(parts.last()) }.getOrNull() ?: return null
         val millis = parts[parts.size - 2].toLongOrNull() ?: return null
-        val slotName = parts.dropLast(2).joinToString(".")
-        if (slotName != slot.value) return null
+        if (parts.dropLast(2).joinToString(".") != stem) return null
         return ConflictFile(path, source, Instant.ofEpochMilli(millis))
     }
 

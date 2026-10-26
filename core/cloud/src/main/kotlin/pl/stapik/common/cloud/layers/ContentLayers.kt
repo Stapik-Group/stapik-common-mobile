@@ -13,19 +13,23 @@ import pl.stapik.common.sync.UnreadableKind
  * passphrase is set is accepted as it is (it was saved before encryption was turned on) and becomes
  * encrypted on the next write; this is the desktop's behaviour too.
  */
-internal class ContentLayers(
+internal class ContentLayers private constructor(
     slot: SlotKey,
-    passphrase: String?,
-    private val gzipThresholdBytes: Int = GzipLayer.DEFAULT_THRESHOLD_BYTES,
-    random: ((Int) -> ByteArray)? = null,
+    private val e2e: E2eBlob?,
+    private val gzipThresholdBytes: Int,
 ) {
-    private val e2e: E2eBlob? = passphrase?.takeIf { it.isNotEmpty() }?.let { phrase ->
-        if (random == null) E2eBlob(phrase, slot.value) else E2eBlob(phrase, slot.value, random)
-    }
+    constructor(
+        slot: SlotKey,
+        passphrase: String?,
+        gzipThresholdBytes: Int = GzipLayer.DEFAULT_THRESHOLD_BYTES,
+        random: ((Int) -> ByteArray)? = null,
+    ) : this(slot, cipherFor(slot, passphrase, random), gzipThresholdBytes)
+
+    private val context: String = slot.partition?.let { "$PARTITION_CONTEXT_PREFIX$it" } ?: DOCUMENT_CONTEXT
 
     fun seal(text: String): String {
         val compressed = GzipLayer.seal(text, gzipThresholdBytes)
-        return e2e?.seal(compressed, DOCUMENT_CONTEXT) ?: compressed
+        return e2e?.seal(compressed, context) ?: compressed
     }
 
     fun open(content: String): String {
@@ -36,13 +40,22 @@ internal class ContentLayers(
             val cipher = e2e ?: throw CloudException(
                 CloudError.Unreadable("The cloud data is end-to-end encrypted; enter the passphrase", UnreadableKind.PASSPHRASE_REQUIRED),
             )
-            text = cipher.open(blob, DOCUMENT_CONTEXT)
+            text = cipher.open(blob, context)
         }
         return GzipLayer.open(text)
     }
 
-    private companion object {
-        const val DOCUMENT_CONTEXT = "document"
-        const val EMPTY_DOCUMENT = "{}"
+    companion object {
+        private const val DOCUMENT_CONTEXT = "document"
+        private const val PARTITION_CONTEXT_PREFIX = "partition/"
+        private const val EMPTY_DOCUMENT = "{}"
+
+        fun cipherFor(slot: SlotKey, passphrase: String?, random: ((Int) -> ByteArray)? = null): E2eBlob? =
+            passphrase?.takeIf { it.isNotEmpty() }?.let { phrase ->
+                if (random == null) E2eBlob(phrase, slot.value) else E2eBlob(phrase, slot.value, random)
+            }
+
+        fun sharing(slot: SlotKey, cipher: E2eBlob?, gzipThresholdBytes: Int): ContentLayers =
+            ContentLayers(slot, cipher, gzipThresholdBytes)
     }
 }

@@ -1,6 +1,7 @@
 package pl.stapik.common.cloud
 
 import java.io.IOException
+import java.net.URLEncoder
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -11,9 +12,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import pl.stapik.common.cloud.layers.ContentLayers
+import pl.stapik.common.cloud.layers.E2eBlob
 import pl.stapik.common.cloud.layers.JsonProbe
 import pl.stapik.common.model.CloudInfo
 import pl.stapik.common.model.CloudScope
@@ -22,10 +25,12 @@ import pl.stapik.common.model.SlotKey
 import pl.stapik.common.sync.CloudError
 import pl.stapik.common.sync.CloudException
 import pl.stapik.common.sync.CloudGateway
+import pl.stapik.common.sync.PartitionInfo
 import pl.stapik.common.sync.RemoteDocument
 
 /**
- * [CloudGateway] over the Stapik Cloud REST API (`/api/v1/documents/{slot}`, `/api/v1/me`).
+ * [CloudGateway] over the Stapik Cloud REST API (`/api/v1/documents/{slot}`,
+ * `/api/v1/documents/{slot}/partitions/{partition}`, `/api/v1/me`).
  *
  * Conflicts: the server (>= 1.2.0) rejects a PUT whose `If-Match` is not the ETag of the stored
  * document. The gateway remembers the ETag from the last read or write of each slot; when it does
@@ -56,12 +61,16 @@ class HttpCloudGateway(
     private class CachedInfo(val info: CloudInfo, val takenAt: Long)
 
     private val layers = HashMap<SlotKey, ContentLayers>()
+    private val ciphers = HashMap<String, E2eBlob?>()
     private val known = HashMap<SlotKey, Known>()
     private var cachedInfo: CachedInfo? = null
 
     @Synchronized
     private fun layersFor(slot: SlotKey): ContentLayers =
-        layers.getOrPut(slot) { ContentLayers(slot, config.passphrase, gzipThresholdBytes) }
+        layers.getOrPut(slot) { ContentLayers.sharing(slot, cipherFor(slot), gzipThresholdBytes) }
+
+    private fun cipherFor(slot: SlotKey): E2eBlob? =
+        ciphers.getOrPut(slot.value) { ContentLayers.cipherFor(slot, config.passphrase) }
 
     @Synchronized
     private fun remember(slot: SlotKey, value: Known?) {
@@ -123,6 +132,25 @@ class HttpCloudGateway(
         return RemoteDocument(content, saved.updatedAt)
     }
 
+    override suspend fun partitions(slot: SlotKey): List<PartitionInfo> {
+        require(!slot.isPartition) { "Only a slot has partitions: '$slot'" }
+        val response = send(newRequest("GET", slotUrl(slot) + "/partitions"))
+        if (response.status == 404) return emptyList()
+        expectOk(response)
+        return runOnWorker { parsePartitions(response.body) }
+    }
+
+    private fun parsePartitions(body: String): List<PartitionInfo> {
+        val items = parseObject(body)["partitions"] as? JsonArray ?: throw unreadable("The server sent no list of partitions")
+        return items.map { item ->
+            val entry = item as? JsonObject ?: throw unreadable("The server sent a partition that is not an object")
+            PartitionInfo(
+                partition = JsonProbe.string(entry, "partition") ?: throw unreadable("The server sent a partition without a name"),
+                updatedAt = JsonProbe.string(entry, "updatedAt") ?: throw unreadable("The server sent a partition without updatedAt"),
+            )
+        }
+    }
+
     /**
      * The ETag to put in `If-Match`, or null when creating a document. Throws
      * [CloudError.Conflict] when the server's document is not the one the caller based on.
@@ -167,7 +195,12 @@ class HttpCloudGateway(
 
     private fun unreadable(reason: String) = CloudException(CloudError.Unreadable(reason))
 
-    private fun documentUrl(slot: SlotKey): String = config.baseUrl + "documents/" + slot.value
+    private fun slotUrl(slot: SlotKey): String = config.baseUrl + "documents/" + slot.value
+
+    private fun documentUrl(slot: SlotKey): String =
+        slot.partition?.let { slotUrl(slot) + "/partitions/" + encodeSegment(it) } ?: slotUrl(slot)
+
+    private fun encodeSegment(text: String): String = URLEncoder.encode(text, Charsets.UTF_8).replace("+", "%20")
 
     private fun newRequest(method: String, url: String, extraHeaders: Map<String, String> = emptyMap(), body: String? = null) =
         HttpRequest(method, url, headers() + extraHeaders, body, maxResponseBytes)
