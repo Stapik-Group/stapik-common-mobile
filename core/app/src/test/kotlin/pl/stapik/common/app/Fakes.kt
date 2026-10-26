@@ -17,6 +17,9 @@ class MemoryDocumentStore(var document: LocalDocument<DocumentEnvelope>? = null)
         this.document = document
     }
     override suspend fun saveConflictCopy(copy: ConflictCopy) = Unit
+    override suspend fun discard() {
+        document = null
+    }
 }
 
 class MemoryPort(var json: String, var failOnImport: Boolean = false) : MobileOnlyPort {

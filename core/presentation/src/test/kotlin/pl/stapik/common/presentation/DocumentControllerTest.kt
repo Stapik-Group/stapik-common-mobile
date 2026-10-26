@@ -45,6 +45,10 @@ class DocumentControllerTest {
         }
         override suspend fun save(document: LocalDocument<DocumentEnvelope>) { this.document = document }
         override suspend fun saveConflictCopy(copy: ConflictCopy) = Unit
+        override suspend fun discard() {
+            document = null
+            failLoad = null
+        }
     }
 
     private class Gateway : CloudGateway {
@@ -124,6 +128,33 @@ class DocumentControllerTest {
         val f = fixture().apply { store.failLoad = DocumentCorruptedException(emptyList(), undecryptable = true) }
         f.controller.load()
         assertEquals(DocumentUiState.Error(LoadErrorKind.UNDECRYPTABLE), f.controller.document.value)
+    }
+
+    @Test
+    fun `discarding unreadable data downloads the cloud document`() = runBlocking {
+        val f = fixture().apply {
+            store.failLoad = DocumentCorruptedException(emptyList(), undecryptable = true)
+            gateway.document = RemoteDocument(
+                """{"lastUpdate":"2026-10-17T08:00:00Z","payload":{"items":["cloud"]}}""",
+                "2026-10-17T08:00:00Z",
+            )
+        }
+        f.controller.load()
+        assertEquals(DocumentUiState.Error(LoadErrorKind.UNDECRYPTABLE), f.controller.document.value)
+        assertEquals(SyncOutcome.Synchronized, f.controller.discardLocalAndResync())
+        assertEquals(DocumentUiState.Success(items("cloud")), f.controller.document.value)
+        assertEquals(SyncBadge.SYNCED, f.controller.sync.value.badge)
+    }
+
+    @Test
+    fun `discarding unreadable data without a cloud leaves an empty local document`() = runBlocking {
+        val f = fixture().apply {
+            connected = false
+            store.failLoad = DocumentCorruptedException(emptyList())
+        }
+        f.controller.load()
+        assertEquals(SyncOutcome.LocalOnly, f.controller.discardLocalAndResync())
+        assertEquals(DocumentUiState.Success(JsonObject(emptyMap())), f.controller.document.value)
     }
 
     @Test

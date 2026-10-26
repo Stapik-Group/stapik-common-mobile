@@ -131,6 +131,19 @@ class DocumentController<T>(
         return outcome
     }
 
+    /**
+     * For a document that cannot be read ([LoadErrorKind.CORRUPTED], [LoadErrorKind.UNDECRYPTABLE]):
+     * deletes the local copy and takes the document from the cloud again. Without a cloud the result
+     * is an empty local document. Changes that never reached the cloud are lost, so ask first.
+     */
+    suspend fun discardLocalAndResync(): SyncOutcome {
+        engine.discardLocalDocument()
+        lastOutcome = null
+        resolvedNotice = null
+        load()
+        return sync()
+    }
+
     suspend fun dismissResolvedNotice() {
         resolvedNotice = null
         refreshIndicator()

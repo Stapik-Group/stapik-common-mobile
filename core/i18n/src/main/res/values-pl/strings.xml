@@ -64,6 +64,10 @@
     <string name="load_error_corrupted">Dane na tym urządzeniu są uszkodzone i nie można ich odczytać.</string>
     <string name="load_error_undecryptable">Dane na tym urządzeniu nie dają się już odblokować. Tak bywa po odtworzeniu danych aplikacji na innym urządzeniu albo po zresetowaniu bezpiecznego magazynu kluczy. Jeśli używasz chmury, dokument nadal w niej jest.</string>
     <string name="load_error_model_mismatch">Dane zostały zapisane przez inną wersję aplikacji i nie można ich odczytać.</string>
+    <string name="load_error_discard_action">Pobierz ponownie z chmury</string>
+    <string name="load_error_discard_title">Odrzucić dane z tego urządzenia?</string>
+    <string name="load_error_discard_message">Nieczytelne dane na tym urządzeniu zostaną usunięte, a dokument pobrany z chmury od nowa. Wymaga to połączenia z chmurą, a zmiany, które nigdy nie trafiły do chmury, przepadną.</string>
+    <string name="load_error_discard_confirm">Odrzuć i pobierz</string>
     <string name="load_error_unknown">Nie udało się wczytać danych.</string>
     <string name="choice_title">Dane na tym urządzeniu i w chmurze</string>
     <string name="choice_message">Zarówno to urządzenie, jak i chmura mają dane. Którą wersję zachować?</string>

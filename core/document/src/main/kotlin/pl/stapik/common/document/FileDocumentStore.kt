@@ -66,6 +66,8 @@ class FileDocumentStore(
         pruneConflictCopies()
     }
 
+    override suspend fun discard() = withContext(Dispatchers.IO) { file.delete() }
+
     /** Conflict copies of this slot, newest first. Unreadable ones are skipped. */
     suspend fun listConflictCopies(): List<ConflictCopy> = withContext(Dispatchers.IO) {
         conflictFiles().mapNotNull { readConflictCopy(it) }
