@@ -77,9 +77,9 @@ class HttpCloudGatewayPartitionsTest {
 
     @Test
     fun `the partition key is escaped in the url`() = runBlocking {
-        gateway().read(slot.inPartition("a?b c"))
+        gateway().read(slot.inPartition("a?b#c"))
 
-        assertTrue(server.requests.single().url.endsWith("/partitions/a%3Fb%20c"))
+        assertTrue(server.requests.single().url.endsWith("/partitions/a%3Fb%23c"))
     }
 
     @Test
@@ -133,7 +133,7 @@ class HttpCloudGatewayPartitionsTest {
     fun `an encrypted partition cannot be passed off as another one`() {
         val g = gateway(passphrase = "pw")
         runBlocking { g.write(year, """{"year":2026}""", "") }
-        server.contents["calendar.json/partitions/2025"] = server.contents.getValue("calendar.json/partitions/2026")
+        server.plant("calendar.json/partitions/2025", server.contents.getValue("calendar.json/partitions/2026"))
 
         val error = errorOf { g.read(slot.inPartition("2025")) }
 
@@ -144,7 +144,7 @@ class HttpCloudGatewayPartitionsTest {
     fun `an encrypted slot cannot be passed off as a partition`() {
         val g = gateway(passphrase = "pw")
         runBlocking { g.write(slot, """{"main":true}""", "") }
-        server.contents["calendar.json/partitions/2026"] = server.contents.getValue("calendar.json")
+        server.plant("calendar.json/partitions/2026", server.contents.getValue("calendar.json"))
 
         val error = errorOf { g.read(year) }
 

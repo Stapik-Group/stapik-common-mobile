@@ -12,6 +12,11 @@ class FakePartitionServer : HttpTransport {
     private var version = 0
     private val updatedAts = mutableMapOf<String, String>()
 
+    fun plant(path: String, content: String) {
+        contents[path] = content
+        updatedAts[path] = "2026-10-01T00:00:00Z"
+    }
+
     private fun etag(path: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(contents.getValue(path).toByteArray())
         return "\"" + digest.joinToString("") { "%02x".format(it) } + "\""
