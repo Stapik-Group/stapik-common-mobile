@@ -1,23 +1,34 @@
 package pl.stapik.common.presentation
 
 import java.nio.file.Files
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import pl.stapik.common.cloud.CloudConfig
 import pl.stapik.common.document.AesGcmCipher
+import pl.stapik.common.document.DocumentCorruptedException
 import pl.stapik.common.model.CloudInfo
 import pl.stapik.common.model.CloudScope
+import pl.stapik.common.model.DocumentCodec
+import pl.stapik.common.model.DocumentEnvelope
+import pl.stapik.common.model.LocalDocument
 import pl.stapik.common.model.SlotKey
 import pl.stapik.common.settings.ConfigLoad
 import pl.stapik.common.settings.ConnectionConfigStore
 import pl.stapik.common.sync.CloudError
 import pl.stapik.common.sync.CloudException
 import pl.stapik.common.sync.CloudGateway
+import pl.stapik.common.sync.ConflictCopy
+import pl.stapik.common.sync.DocumentStore
 import pl.stapik.common.sync.RemoteDocument
+import pl.stapik.common.sync.SyncEngine
 
 class ConnectControllerTest {
     private val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
@@ -33,8 +44,26 @@ class ConnectControllerTest {
         override suspend fun write(slot: SlotKey, content: String, baseline: String): RemoteDocument = error("unused")
     }
 
-    private fun controller(error: CloudError? = null, created: MutableList<CloudConfig> = mutableListOf()) =
-        ConnectController(store(), { config -> created += config; FakeGateway(error) })
+    private class MemoryStore(var document: LocalDocument<DocumentEnvelope>? = null) : DocumentStore {
+        override suspend fun load() = document
+        override suspend fun save(document: LocalDocument<DocumentEnvelope>) { this.document = document }
+        override suspend fun saveConflictCopy(copy: ConflictCopy) = Unit
+        override suspend fun discard() { document = null }
+    }
+
+    private val codec = DocumentCodec(JsonObject.serializer()) { it.isEmpty() }
+    private val clock = Clock.fixed(Instant.parse("2026-10-26T12:00:00Z"), ZoneOffset.UTC)
+
+    private fun engineOver(store: MemoryStore) = SyncEngine(SlotKey("a.json"), codec, store, { null }, clock)
+
+    private fun syncedDocument() = LocalDocument(DocumentEnvelope.parse("""{"lastUpdate":"t","payload":{"x":1}}"""))
+        .synchronized(DocumentEnvelope.parse("""{"lastUpdate":"t","payload":{"x":1}}"""), "2026-10-26T11:00:00Z", CloudScope.READ_WRITE, "cloud-1")
+
+    private fun controller(
+        error: CloudError? = null,
+        created: MutableList<CloudConfig> = mutableListOf(),
+        documents: List<SyncEngine<*>> = emptyList(),
+    ) = ConnectController(store(), { config -> created += config; FakeGateway(error) }, documents)
 
     @Test
     fun `form validation`() {
@@ -124,8 +153,37 @@ class ConnectControllerTest {
     }
 
     @Test
+    fun `disconnect makes every document forget the cloud and keeps its content`() = runBlocking {
+        val first = MemoryStore(syncedDocument())
+        val second = MemoryStore(syncedDocument())
+        val c = controller(documents = listOf(engineOver(first), engineOver(second)))
+        c.disconnect()
+        listOf(first, second).forEach {
+            val stored = checkNotNull(it.document)
+            assertFalse(stored.everSynchronized)
+            assertEquals(null, stored.cloudIdentity)
+            assertEquals("""{"lastUpdate":"t","payload":{"x":1}}""", stored.content.toJson())
+        }
+    }
+
+    @Test
+    fun `disconnect still forgets the connection when a document cannot be read`() = runBlocking {
+        val unreadable = object : DocumentStore {
+            override suspend fun load(): LocalDocument<DocumentEnvelope>? = throw DocumentCorruptedException(emptyList())
+            override suspend fun save(document: LocalDocument<DocumentEnvelope>) = Unit
+            override suspend fun saveConflictCopy(copy: ConflictCopy) = Unit
+            override suspend fun discard() = Unit
+        }
+        val c = controller(documents = listOf(SyncEngine(SlotKey("a.json"), codec, unreadable, { null }, clock)))
+        c.setApiUrl("https://c.example"); c.setApiKey("k")
+        c.connect()
+        c.disconnect()
+        assertEquals(ConfigLoad.None, store().load())
+    }
+
+    @Test
     fun `the form is prefilled from the saved configuration`() {
-        val c = ConnectController(store(), { FakeGateway() }, CloudConfig("https://c.example", "k", "p"))
+        val c = ConnectController(store(), { FakeGateway() }, emptyList(), CloudConfig("https://c.example", "k", "p"))
         assertEquals("k", c.state.value.apiKey)
         assertEquals("p", c.state.value.passphrase)
     }

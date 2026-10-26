@@ -14,6 +14,7 @@ import pl.stapik.common.settings.ConnectionConfigStore
 import pl.stapik.common.sync.CloudError
 import pl.stapik.common.sync.CloudException
 import pl.stapik.common.sync.CloudGateway
+import pl.stapik.common.sync.SyncEngine
 
 /** State of the connect form. */
 data class ConnectFormState(
@@ -53,11 +54,13 @@ sealed interface ConnectOutcome {
  * only then saves the settings, so a wrong key never replaces a working connection.
  *
  * @param gatewayFactory builds a client for a configuration (an [pl.stapik.common.cloud.HttpCloudGateway] in the app).
+ * @param documents the synchronised documents of the app; [disconnect] makes each forget the cloud it was synchronised with.
  * @param initial the saved configuration, to prefill the form.
  */
 class ConnectController(
     private val store: ConnectionConfigStore,
     private val gatewayFactory: (CloudConfig) -> CloudGateway,
+    private val documents: List<SyncEngine<*>>,
     initial: CloudConfig? = null,
 ) {
     private val mutableState = MutableStateFlow(
@@ -90,10 +93,20 @@ class ConnectController(
         }
     }
 
-    /** Forgets the saved connection; local data stays. */
+    /** Forgets the saved connection and the cloud baseline of every document; local data stays. */
     suspend fun disconnect() {
         withContext(Dispatchers.IO) { store.clear() }
+        documents.forEach { detach(it) }
         mutableState.update { ConnectFormState() }
+    }
+
+    private suspend fun detach(document: SyncEngine<*>) {
+        try {
+            document.detachFromCloud()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+        }
     }
 
     private fun fail(key: String): ConnectOutcome {

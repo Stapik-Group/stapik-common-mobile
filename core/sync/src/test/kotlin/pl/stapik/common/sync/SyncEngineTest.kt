@@ -80,6 +80,32 @@ class SyncEngineTest {
     }
 
     @Test
+    fun `detaching keeps the content and forgets the cloud`() = runBlocking {
+        val f = fixture()
+        f.engine.edit { Notes(listOf("a")) }
+        f.engine.detachFromCloud()
+        val stored = checkNotNull(f.store.document)
+        assertFalse(stored.everSynchronized)
+        assertEquals(null, stored.cloudIdentity)
+        assertEquals(Notes(listOf("a")), f.engine.load())
+    }
+
+    @Test
+    fun `after detaching, the same cloud is a first connection again`() = runBlocking {
+        val f = fixture()
+        f.engine.edit { Notes(listOf("a")) }
+        f.engine.detachFromCloud()
+        assertEquals(SyncOutcome.NeedsFirstConnectionChoice(true), f.engine.sync())
+    }
+
+    @Test
+    fun `detaching with nothing stored does nothing`() = runBlocking {
+        val f = fixture()
+        f.engine.detachFromCloud()
+        assertEquals(null, f.store.document)
+    }
+
+    @Test
     fun `first connection with no local data takes the cloud`() = runBlocking {
         val f = fixture().apply { gateway.document = remote(t0, listOf("cloud")) }
         assertEquals(SyncOutcome.Synchronized, f.engine.sync())

@@ -96,6 +96,12 @@ class SyncEngine<T>(
         }
     }
 
+    /** Forgets the cloud the document was synchronised with (disconnect): the content and unsent changes stay. */
+    suspend fun detachFromCloud() = mutex.withLock {
+        store.load()?.let { store.save(it.detachedFromCloud()) }
+        mutableStatus.value = SyncStatus.IDLE
+    }
+
     /** Deletes the local document. For data that cannot be read; changes not yet sent to the cloud are lost. */
     suspend fun discardLocalDocument() = mutex.withLock { store.discard() }
 
