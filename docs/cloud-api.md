@@ -1,104 +1,104 @@
-# Kontrakt klienta ze Stapik Cloud
+# The client's contract with Stapik Cloud
 
-Opis tego, co robi `:core:cloud`, spisany raz, żeby aplikacje i biblioteka nie rozjeżdżały się z serwerem i desktopem (`stapik-common`). Jeśli kod i ten dokument się różnią, wygrywa kod; dokument trzeba wtedy poprawić.
+A description of what `:core:cloud` does, written down once so that the apps and the library do not drift away from the server and the desktop (`stapik-common`). If the code and this document differ, the code wins; the document then has to be corrected.
 
-Oznaczenia: **[kod]** – zaimplementowane i objęte testami, **[założenie]** – przyjęte bez potwierdzenia w kodzie serwera.
+Markers: **[code]** - implemented and covered by tests, **[assumption]** - taken without confirmation in the server code.
 
-## Adresy i nagłówki
+## Addresses and headers
 
-- Baza: adres z konfiguracji bez białych znaków na brzegach i bez końcowych `/`, potem `/api/v1/`. **[kod]** (`CloudConfig.baseUrl`)
-- `GET {baza}me` – kim jest klucz. Odpowiedź ma pola `scope` i `extensionId`. Bramka zapamiętuje ją na 5 minut (zegar monotoniczny, nie czas urządzenia) i zapomina po `401` lub `403` z dowolnego żądania, więc synchronizacja nie pyta o to przed każdą zmianą. **[kod]**
-- `GET {baza}documents/{slot}` – dokument, `404` gdy slotu nie ma. **[kod]**
-- `PUT {baza}documents/{slot}` – zapis. **[kod]**
-- Każde żądanie niesie `x-api-key`. Klucz i fraza nie trafiają do logów ani do eksportu, także przez `toString()` `CloudConfig` i `ConnectFormState`. **[kod]**
-- `http://` jest dozwolone, ale UI ostrzega, że klucz idzie nieszyfrowany. **[kod]** (`ApiUrlStatus`)
-- Treść odpowiedzi jest czytana do limitu 16 MiB (`HttpCloudGateway.DEFAULT_MAX_RESPONSE_BYTES`, też po zdjęciu kompresji HTTP). Dłuższa odpowiedź przerywa odczyt i kończy się `Unreadable`. Desktop ma ten sam mechanizm (`maxResponseBytes` żądania), ale dla dokumentów go nie ustawia. **[kod]**
-- Przekierowania HTTP nie są wykonywane, także w kliencie przekazanym do `OkHttpTransport`: OkHttp przy zmianie hosta zdejmuje tylko `Authorization`, więc `x-api-key` poleciałby do hosta wskazanego w `Location`. **[kod]**
+- Base: the address from the configuration without whitespace at the edges and without trailing `/`, then `/api/v1/`. **[code]** (`CloudConfig.baseUrl`)
+- `GET {base}me` - who the key belongs to. The response has the fields `scope` and `extensionId`. The gateway remembers it for 5 minutes (monotonic clock, not the device time) and forgets it after a `401` or `403` from any request, so synchronisation does not ask for it before every change. **[code]**
+- `GET {base}documents/{slot}` - the document, `404` when the slot does not exist. **[code]**
+- `PUT {base}documents/{slot}` - write. **[code]**
+- Every request carries `x-api-key`. The key and the passphrase do not reach logs or exports, also through `toString()` of `CloudConfig` and `ConnectFormState`. **[code]**
+- `http://` is allowed, but the UI warns that the key travels unencrypted. **[code]** (`ApiUrlStatus`)
+- The response body is read up to a limit of 16 MiB (`HttpCloudGateway.DEFAULT_MAX_RESPONSE_BYTES`, also after HTTP compression is removed). A longer response aborts the read and ends with `Unreadable`. The desktop has the same mechanism (`maxResponseBytes` of a request), but does not set it for documents. **[code]**
+- HTTP redirects are not followed, also in a client passed to `OkHttpTransport`: when the host changes, OkHttp removes only `Authorization`, so `x-api-key` would go to the host named in `Location`. **[code]**
 
-## Dokument
+## Document
 
-Odpowiedź: `slotKey`, `content` (tekst zawierający JSON koperty), `contentHash`, `updatedAt` (ISO-8601). **[kod]**
+Response: `slotKey`, `content` (text containing the JSON of the envelope), `contentHash`, `updatedAt` (ISO-8601). **[code]**
 
-Koperta (`content`): obiekt z `lastUpdate` i `payload`; nieznane pola najwyższego poziomu przeżywają zapis. **[kod]** (`DocumentEnvelope`)
+Envelope (`content`): an object with `lastUpdate` and `payload`; unknown fields at the top level survive a write. **[code]** (`DocumentEnvelope`)
 
-Zapis: ciało `{"content": "<tekst>"}`; gdy klient zna wersję, dodatkowo `"clientLastKnownUpdate": "<updatedAt>"` (dla starszych serwerów). **[kod]**
+Write: the body `{"content": "<text>"}`; when the client knows the version, additionally `"clientLastKnownUpdate": "<updatedAt>"` (for older servers). **[code]**
 
-### Nieznane pola przy zapisie
+### Unknown fields on write
 
-Kodek (`DocumentCodec`) czyta dokument do typowanego modelu aplikacji, więc to, co model nie opisuje, przy zapisie przeżywa tylko częściowo:
+The codec (`DocumentCodec`) reads the document into the app's typed model, so what the model does not describe survives a write only partly:
 
-| Gdzie jest nieznane pole | Po zapisie z tej wersji biblioteki |
+| Where the unknown field is | After a write from this version of the library |
 |---|---|
-| najwyższy poziom koperty (obok `lastUpdate` i `payload`) | zostaje |
-| najwyższy poziom `payload`, wraz ze wszystkim, co w nim zagnieżdżone | zostaje w całości |
-| wewnątrz znanej struktury, np. dodatkowy klucz w elemencie listy | **znika** |
+| the top level of the envelope (next to `lastUpdate` and `payload`) | stays |
+| the top level of `payload`, together with everything nested in it | stays in full |
+| inside a known structure, for example an extra key in a list item | **disappears** |
 
-Przed utratą nie chroni kodek, tylko `SchemaGate`: dokument zapisany w nowszym schemacie niż ten, który zna aplikacja, jest pokazywany, ale nie edytowany (`SyncOutcome.NewerSchema`). Ochrona działa więc tylko wtedy, gdy desktop podnosi numer schematu przy każdej zmianie struktury znanych obiektów. Dodanie pola do znanego obiektu bez podniesienia numeru schematu skończy się jego utratą przy pierwszej edycji na telefonie. **[kod; zachowanie desktopu: założenie]**
+What protects against the loss is not the codec but `SchemaGate`: a document written in a newer schema than the app knows is shown but not edited (`SyncOutcome.NewerSchema`). So the protection works only if the desktop raises the schema number on every change to the structure of known objects. Adding a field to a known object without raising the schema number ends with the field being lost on the first edit on the phone. **[code; desktop behaviour: assumption]**
 
-## Konflikty
+## Conflicts
 
-Serwer ≥ 1.2.0 porównuje nagłówek `If-Match` z ETagiem dokumentu (cudzysłowiony SHA-256 treści) i odpowiada `409` przy braku lub nieaktualnym. **[kod po stronie klienta; zachowanie serwera: założenie z dokumentacji desktopu]**
+A server >= 1.2.0 compares the `If-Match` header with the document's ETag (a quoted SHA-256 of the content) and answers `409` when it is missing or stale. **[client side: code; server behaviour: assumption from the desktop documentation]**
 
-`updatedAt` i baza są porównywane jako chwile (`CloudTimestamp.sameInstant`), nie jako tekst: `Z`, `+00:00` i różna liczba cyfr ułamka sekundy to ten sam czas i nie dają fałszywego konfliktu ani dodatkowego GET. Tekst, który nie jest czasem, porównuje się jako tekst. **[kod]**
+`updatedAt` and the baseline are compared as instants (`CloudTimestamp.sameInstant`), not as text: `Z`, `+00:00` and a different number of fraction digits are the same time and give neither a false conflict nor an extra GET. Differences below a microsecond do not count as a change either: in reply to a `PUT` the server returns `updatedAt` with nanosecond precision, while the database stores and returns microseconds, so the next `GET` returned a different value and every second write ended with a false conflict. Text that is not a time is compared as text. **[code]**
 
-Klient pamięta ETag z ostatniego odczytu lub zapisu każdego slotu:
+The client remembers the ETag of the last read or write of every slot:
 
-1. Zna `updatedAt` równe bazie, od której edytował → używa zapamiętanego ETagu.
-2. Nie zna → czyta dokument raz. Jeśli `updatedAt` serwera różni się od bazy, to jest konflikt i **żadne PUT nie jest wysyłane**.
-3. `409` na PUT → konflikt (silnik powtarza do 3 razy, potem wygrywa serwer, a lokalna wersja zostaje jako kopia konfliktu).
-4. Brak dokumentu przy niepustej bazie → konflikt.
+1. It knows an `updatedAt` equal to the baseline it edited from -> it uses the remembered ETag.
+2. It does not know it -> it reads the document once. If the server's `updatedAt` differs from the baseline, that is a conflict and **no PUT is sent**.
+3. `409` on a PUT -> conflict (the engine repeats up to 3 times, then the server wins and the local version stays as a conflict copy).
+4. No document with a non-empty baseline -> conflict.
 
-O tym, kto wygrywa, nie decyduje zegar. Gdy zmieniły się obie strony (serwer względem bazy i lokalny dokument), zostaje wersja z chmury, a lokalna trafia do kopii konfliktu; wynik to `ServerWon`. `modifiedAt` lokalnego dokumentu jest tylko podpowiedzią dla UI. Desktop rozstrzyga inaczej: porównuje `lastUpdate` z kopert obu stron (czas edycji, nie czas serwera), więc po stronie desktopu rozstrzygnięcie nadal zależy od zegarów urządzeń.
+A clock does not decide who wins. When both sides changed (the server relative to the baseline, and the local document), the cloud version stays and the local one goes to a conflict copy; the result is `ServerWon`. The local document's `modifiedAt` is only a hint for the UI. The desktop decides differently: it compares the `lastUpdate` of both envelopes (the time of the edit, not the server time), so on the desktop side the decision still depends on the clocks of the devices.
 
-Czy serwer przyjmuje jednocześnie `If-Match` i `clientLastKnownUpdate`: **[założenie]**, sprawdzone tylko na atrapie serwera.
+Whether the server accepts `If-Match` and `clientLastKnownUpdate` together: **[assumption]**, checked only against a mock server.
 
-## Limity i błędy
+## Limits and errors
 
-| Odpowiedź | Znaczenie w kliencie |
+| Response | Meaning in the client |
 |---|---|
-| `401` | `Unauthorized` – klucz odrzucony lub wygasł |
-| `403` | `Forbidden` – klucz bez uprawnień |
-| `404` | brak dokumentu (tylko odczyt) |
+| `401` | `Unauthorized` - the key was rejected or has expired |
+| `403` | `Forbidden` - the key lacks permission |
+| `404` | no document (read only) |
 | `409` | `Conflict` |
-| `429` | `Retry-After` (sekundy albo data HTTP) ≤ 30 s: klient czeka i ponawia raz; dłużej: `RateLimited(retryAfter)`, a ponowienie bierze na siebie tło. Data HTTP jest liczona względem zegara urządzenia, ujemna lub nierozpoznana wartość to „nieznane” |
-| `3xx` | `ServerError(kod)` – przekierowanie nie jest wykonywane; adres w ustawieniach ma wskazywać wprost na API |
-| inne ≥ 400 | `ServerError(kod)` |
-| brak odpowiedzi | `Network` |
+| `429` | `Retry-After` (seconds or an HTTP date) <= 30 s: the client waits and retries once; longer: `RateLimited(retryAfter)`, and the retry is left to the background. An HTTP date is counted against the device clock, a negative or unrecognised value means "unknown" |
+| `3xx` | `ServerError(code)` - the redirect is not followed; the address in the settings has to point straight at the API |
+| other >= 400 | `ServerError(code)` |
+| no response | `Network` |
 
-Żądanie, parsowanie odpowiedzi, kompresja i szyfrowanie (Argon2id) wykonują się na dispatcherze bramki (domyślnie `Dispatchers.IO`), nie na wątku wołającego. `OutOfMemoryError` w takim kroku kończy się `Unreadable`, nie przerwaniem procesu. **[kod]**
+The request, response parsing, compression and encryption (Argon2id) run on the gateway's dispatcher (`Dispatchers.IO` by default), not on the caller's thread. An `OutOfMemoryError` in such a step ends with `Unreadable`, not with the process being killed. **[code]**
 
-Limit serwera: 600 żądań na minutę (nagłówki `X-RateLimit-*`). `X-Api-Key-Expires-At` (ISO-8601) jest przekazywane do `onApiKeyExpiry`, żeby UI mogło ostrzec o wygasaniu klucza. **[kod]**
+Server limit: 600 requests per minute (`X-RateLimit-*` headers). `X-Api-Key-Expires-At` (ISO-8601) is passed to `onApiKeyExpiry`, so the UI can warn about the key expiring. **[code]**
 
-Zakres klucza: `READ_WRITE` pozwala zapisywać; każda inna wartość jest traktowana jak tylko do odczytu (`READ_ONLY` to **[założenie]**).
+Key scope: `READ_WRITE` allows writing; every other value is treated as read only (`READ_ONLY` is an **[assumption]**).
 
-## Warstwy treści
+## Content layers
 
-Zapis: najpierw kompresja, potem (przy ustawionej frazie) szyfrowanie. Odczyt: odwrotnie. Dane bez żadnej warstwy są zawsze akceptowane, także przy ustawionej frazie (zapisane przed jej ustawieniem; następny zapis je zaszyfruje).
+Write: compression first, then (when a passphrase is set) encryption. Read: the other way round. Data without any layer is always accepted, also when a passphrase is set (it was saved before the passphrase was set; the next write encrypts it).
 
-### Kompresja `stapik-gzip` **[kod]**
+### `stapik-gzip` compression **[code]**
 
-`{"format":"stapik-gzip","version":1,"data":"<base64 strumienia gzip>"}`
+`{"format":"stapik-gzip","version":1,"data":"<base64 of a gzip stream>"}`
 
-- od 32 KiB tekstu w UTF-8; mniejsze lecą bez zmian,
-- jeśli base64 nie jest krótszy od tekstu, wysyłany jest tekst,
-- próg musi być taki jak na desktopie, bo starsze desktopy nie czytają skompresowanych dokumentów,
-- odczyt ma limit 32 MiB po rozpakowaniu (desktop: 256 MiB, więc dokument większy niż 32 MiB powstały na desktopie nie otworzy się na telefonie, tylko da `Unreadable`).
+- from 32 KiB of UTF-8 text; smaller texts go as they are,
+- if the base64 is not shorter than the text, the text is sent,
+- the threshold has to be the same as on the desktop, because older desktops do not read compressed documents,
+- reading has a limit of 32 MiB after decompression (desktop: 256 MiB, so a document larger than 32 MiB created on the desktop will not open on the phone, it ends with `Unreadable`).
 
-### Szyfrowanie `stapik-e2e` **[kod; zgodność z libsodium sprawdzona na wektorach]**
+### `stapik-e2e` encryption **[code; compatibility with libsodium checked on test vectors]**
 
-`{"format":"stapik-e2e","version":1,"salt":"..","nonce":"..","ciphertext":".."}` (base64 standardowe z dopełnieniem)
+`{"format":"stapik-e2e","version":1,"salt":"..","nonce":"..","ciphertext":".."}` (standard base64 with padding)
 
-- klucz: Argon2id v1.3, 2 przebiegi, 64 MiB, 1 wątek, sól 16 B, wynik 32 B (`crypto_pwhash` „interactive”),
-- szyfr: XChaCha20-Poly1305-IETF, nonce 24 B, tag 16 B dołączony do szyfrogramu,
-- dane dodatkowe (AAD): `stapik-e2e/1/<slot>/document`,
-- nowa sól na instancję, klucze buforowane per sól (maks. 8),
-- implementacja: BouncyCastle (czysta Java), nie natywny libsodium; HChaCha20 jest własny, bo BouncyCastle nie ma XChaCha.
+- key: Argon2id v1.3, 2 passes, 64 MiB, 1 thread, 16 B salt, 32 B output (`crypto_pwhash` "interactive"),
+- cipher: XChaCha20-Poly1305-IETF, 24 B nonce, 16 B tag appended to the ciphertext,
+- additional data (AAD): `stapik-e2e/1/<slot>/document`,
+- a new salt per instance, keys cached per salt (at most 8),
+- implementation: BouncyCastle (pure Java), not native libsodium; HChaCha20 is custom, because BouncyCastle has no XChaCha.
 
-Błędy odczytu (`CloudError.Unreadable`) mają rodzaj: brak frazy, zła fraza lub zmodyfikowane dane, nowsza wersja formatu, inny. Przy każdym z nich niczego się nie zapisuje.
+Read errors (`CloudError.Unreadable`) have a kind: no passphrase, wrong passphrase or modified data, newer format version, other. With any of them nothing is written.
 
-## Logi i raporty błędów
+## Logs and error reports
 
-Klucz i fraza nie trafiają do komunikatów błędów biblioteki (`CloudError`, `CloudException`), do `toString()` konfiguracji, formularza i żądania HTTP. Aplikacja, która loguje własne wyjątki albo wysyła raporty o błędach, przepuszcza tekst przez `Redactor`:
+The key and the passphrase do not reach the library's error messages (`CloudError`, `CloudException`), nor `toString()` of the configuration, the form and the HTTP request. An app that logs its own exceptions or sends error reports passes the text through `Redactor`:
 
 ```kotlin
 val redactor = Redactor.of(config)
@@ -106,8 +106,8 @@ log.e(redactor.describe(error))
 report.attach(redactor.stackTrace(error))
 ```
 
-`Redactor` zastępuje `***` znane sekrety (klucz, frazę) w każdym miejscu tekstu, a poza tym wartości pól `x-api-key`, `authorization`, `apiKey`, `passphrase`, `password` oraz dane logowania w adresie (`https://użytkownik:hasło@host`). `describe` przechodzi po łańcuchu przyczyn, `stackTrace` maskuje cały ślad stosu. Treść dokumentu użytkownika nie jest rozpoznawana: nie wkładaj jej do logów. **[kod]**
+`Redactor` replaces with `***` the known secrets (the key, the passphrase) anywhere in the text, and besides that the values of the fields `x-api-key`, `authorization`, `apiKey`, `passphrase`, `password` and the credentials in an address (`https://user:password@host`). `describe` walks the chain of causes, `stackTrace` masks the whole stack trace. The content of the user's document is not recognised: do not put it in logs. **[code]**
 
-## Kopie eksportu
+## Export copies
 
-Plik eksportu chroniony frazą to blob `stapik-e2e` z AAD `stapik-e2e/1/backup/archive`, którego tekstem jawnym jest Base64 archiwum ZIP. To format tylko mobilny; desktop go nie czyta.
+An export file protected with a passphrase is a `stapik-e2e` blob with the AAD `stapik-e2e/1/backup/archive`, whose plaintext is the Base64 of a ZIP archive. This is a mobile-only format; the desktop does not read it.
