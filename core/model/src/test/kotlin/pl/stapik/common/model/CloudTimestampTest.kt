@@ -17,6 +17,17 @@ class CloudTimestampTest {
     }
 
     @Test
+    fun `a difference below the storage precision does not matter`() {
+        assertTrue(CloudTimestamp.sameInstant("2026-10-10T08:00:00.123456789Z", "2026-10-10T08:00:00.123457Z"))
+        assertTrue(CloudTimestamp.sameInstant("2026-10-10T08:00:00.123456789Z", "2026-10-10T08:00:00.123456Z"))
+    }
+
+    @Test
+    fun `a difference of two microseconds matters`() {
+        assertFalse(CloudTimestamp.sameInstant("2026-10-10T08:00:00.123456Z", "2026-10-10T08:00:00.123458Z"))
+    }
+
+    @Test
     fun `zulu and a zero offset are the same`() {
         assertTrue(CloudTimestamp.sameInstant("2026-10-10T08:00:00Z", "2026-10-10T08:00:00+00:00"))
     }
